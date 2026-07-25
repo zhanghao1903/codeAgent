@@ -12,6 +12,12 @@ from taskweavn.llm.contracts import (
     RetryPolicy,
     ThinkingConfig,
 )
+from taskweavn.llm.provider_catalog import (
+    DEFAULT_CLAUDE_BASE_URL,
+    DEFAULT_OPENAI_BASE_URL,
+    SUPPORTED_LLM_PROVIDERS,
+    validate_provider_base_url,
+)
 
 
 @dataclass(frozen=True)
@@ -71,6 +77,32 @@ def load_client_config_from_env(
                 "OPENROUTER_API_KEY or LLM_API_KEY is required for LLM_PROVIDER=openrouter."
             )
         provider = OpenRouterProvider(api_key=api_key, provider_routing=routing)
+    elif provider_name == "openai":
+        from taskweavn.llm.providers.openai import OpenAIProvider
+
+        api_key = source_env.get("OPENAI_API_KEY") or source_env.get("LLM_API_KEY")
+        if not api_key:
+            raise RuntimeError("OPENAI_API_KEY or LLM_API_KEY is required for LLM_PROVIDER=openai.")
+        base_url = validate_provider_base_url(
+            provider_name,
+            source_env.get("OPENAI_BASE_URL", DEFAULT_OPENAI_BASE_URL),
+        )
+        assert base_url is not None
+        provider = OpenAIProvider(api_key=api_key, base_url=base_url)
+    elif provider_name == "claude":
+        from taskweavn.llm.providers.claude import ClaudeProvider
+
+        api_key = source_env.get("ANTHROPIC_API_KEY") or source_env.get("LLM_API_KEY")
+        if not api_key:
+            raise RuntimeError(
+                "ANTHROPIC_API_KEY or LLM_API_KEY is required for LLM_PROVIDER=claude."
+            )
+        base_url = validate_provider_base_url(
+            provider_name,
+            source_env.get("ANTHROPIC_BASE_URL", DEFAULT_CLAUDE_BASE_URL),
+        )
+        assert base_url is not None
+        provider = ClaudeProvider(api_key=api_key, base_url=base_url)
     elif provider_name == "litellm":
         from taskweavn.llm.providers.litellm import LiteLLMProvider
 
@@ -82,7 +114,9 @@ def load_client_config_from_env(
         provider = LiteLLMProvider(api_key=api_key)
     else:
         raise RuntimeError(
-            "LLM_PROVIDER must be one of: litellm, deepseek, openrouter; "
+            "LLM_PROVIDER must be one of: "
+            + ", ".join(SUPPORTED_LLM_PROVIDERS)
+            + "; "
             f"got {provider_name!r}."
         )
 
@@ -102,6 +136,7 @@ def build_provider(
     api_key: str | None,
     retry_policy: RetryPolicy | None = None,
     provider_routing: ProviderRoutingConfig | None = None,
+    base_url: str | None = None,
 ) -> LLMProvider:
     """Build a provider explicitly, mostly for tests and advanced config."""
     normalized = provider_name.strip().lower()
@@ -122,6 +157,26 @@ def build_provider(
             api_key=api_key,
             retry_policy=retry_policy,
             provider_routing=provider_routing,
+        )
+    if normalized == "openai":
+        from taskweavn.llm.providers.openai import OpenAIProvider
+
+        if api_key is None:
+            raise RuntimeError("api_key is required for openai provider")
+        return OpenAIProvider(
+            api_key=api_key,
+            base_url=base_url or DEFAULT_OPENAI_BASE_URL,
+            retry_policy=retry_policy,
+        )
+    if normalized == "claude":
+        from taskweavn.llm.providers.claude import ClaudeProvider
+
+        if api_key is None:
+            raise RuntimeError("api_key is required for claude provider")
+        return ClaudeProvider(
+            api_key=api_key,
+            base_url=base_url or DEFAULT_CLAUDE_BASE_URL,
+            retry_policy=retry_policy,
         )
     raise RuntimeError(f"unknown LLM provider: {provider_name!r}")
 

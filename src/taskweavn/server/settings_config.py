@@ -16,6 +16,26 @@ from pydantic import Field, ValidationError
 from taskweavn.core import WorkspaceLayout
 from taskweavn.observability import build_session_logging_config
 from taskweavn.product_errors import product_error_details
+from taskweavn.server.settings_llm import (
+    SETTINGS_SECRETS_SCHEMA_VERSION,
+    SUPPORTED_SETTINGS_PROVIDERS,
+    SettingsApiKeySource,
+    SettingsConfigLlm,
+    SettingsConfigProviderOption,
+    SettingsConfigSource,
+    UpdateSettingsConfigLlmPayload,
+    build_llm_summary,
+    has_effective_llm_api_key,
+    llm_api_key_replacement,
+    llm_config_update,
+    llm_provider_secret_payload,
+    project_llm_effective_env,
+    read_legacy_llm_secret,
+    validate_llm_settings,
+)
+from taskweavn.server.settings_llm import (
+    read_llm_provider_secret as read_provider_secret_data,
+)
 from taskweavn.server.settings_readiness import (
     DEFAULT_FIRST_RUN_LLM_MODEL,
     DEFAULT_FIRST_RUN_LLM_PROVIDER,
@@ -28,23 +48,10 @@ from taskweavn.server.ui_contract.base import UiContractModel
 SETTINGS_CONFIG_SCHEMA_VERSION = "plato.settings_config.v1"
 SETTINGS_CONFIG_UPDATE_SCHEMA_VERSION = "plato.settings_config_update.v1"
 
-SettingsProvider = Literal["litellm", "deepseek", "openrouter"]
-SettingsConfigSource = Literal["default", "env", "stored"]
-SettingsApiKeySource = Literal["none", "env", "stored"]
 SettingsWebSearchProvider = Literal["tavily"]
 SettingsWebSearchStatus = Literal["disabled", "missing_key", "ready"]
 SettingsWebFetchStatus = Literal["disabled", "missing_key", "ready"]
 
-SUPPORTED_SETTINGS_PROVIDERS: tuple[SettingsProvider, ...] = (
-    "litellm",
-    "deepseek",
-    "openrouter",
-)
-_PROVIDER_LABELS: dict[str, str] = {
-    "litellm": "LiteLLM",
-    "deepseek": "DeepSeek",
-    "openrouter": "OpenRouter",
-}
 SUPPORTED_WEB_SEARCH_PROVIDERS: tuple[SettingsWebSearchProvider, ...] = ("tavily",)
 _WEB_SEARCH_PROVIDER_LABELS: dict[str, str] = {
     "tavily": "Tavily",
@@ -52,29 +59,11 @@ _WEB_SEARCH_PROVIDER_LABELS: dict[str, str] = {
 _STORAGE_SCHEMA_VERSION = "plato.local_settings_storage.v1"
 
 
-class SettingsConfigProviderOption(UiContractModel):
-    id: SettingsProvider
-    label: str
-    required_api_key_env_vars: tuple[str, ...]
-    preferred_api_key_env_var: str
-
-
 class SettingsConfigWebSearchProviderOption(UiContractModel):
     id: SettingsWebSearchProvider
     label: str
     required_api_key_env_vars: tuple[str, ...]
     preferred_api_key_env_var: str
-
-
-class SettingsConfigLlm(UiContractModel):
-    provider: str
-    provider_source: SettingsConfigSource
-    provider_options: tuple[SettingsConfigProviderOption, ...]
-    model: str
-    model_source: SettingsConfigSource
-    api_key_configured: bool
-    api_key_source: SettingsApiKeySource
-    api_key_env_var: str
 
 
 class SettingsConfigLogging(UiContractModel):
@@ -121,18 +110,10 @@ class SettingsConfigSummary(UiContractModel):
 
 
 class SettingsConfigUpdateResult(UiContractModel):
-    schema_version: Literal["plato.settings_config_update.v1"] = (
-        "plato.settings_config_update.v1"
-    )
+    schema_version: Literal["plato.settings_config_update.v1"] = "plato.settings_config_update.v1"
     updated_at: datetime
     config: SettingsConfigSummary
     readiness: dict[str, Any]
-
-
-class UpdateSettingsConfigLlmPayload(UiContractModel):
-    provider: str = Field(min_length=1)
-    model: str = Field(min_length=1)
-    api_key: str | None = None
 
 
 class UpdateSettingsConfigLoggingPayload(UiContractModel):
@@ -209,11 +190,7 @@ class SettingsConfigValidationError(ValueError):
                 ("open_settings", "export_diagnostics"),
                 severity="action_required",
                 user_message_key="settings.config.invalid",
-                extra={
-                    "fieldErrors": [
-                        field_error.to_dict() for field_error in self.field_errors
-                    ]
-                },
+                extra={"fieldErrors": [field_error.to_dict() for field_error in self.field_errors]},
             )
             if has_llm_key_error
             else product_error_details(
@@ -221,11 +198,7 @@ class SettingsConfigValidationError(ValueError):
                 ("edit_input", "open_settings"),
                 severity="action_required",
                 user_message_key="settings.config.invalid",
-                extra={
-                    "fieldErrors": [
-                        field_error.to_dict() for field_error in self.field_errors
-                    ]
-                },
+                extra={"fieldErrors": [field_error.to_dict() for field_error in self.field_errors]},
             )
         )
         return ApiError(
@@ -267,34 +240,15 @@ class FileSettingsConfigStore:
         return _read_json_object(self.config_path)
 
     def read_secret(self) -> tuple[str, str] | None:
-        data = _read_json_object(self.secrets_path)
-        llm = data.get("llm")
-        if not isinstance(llm, Mapping):
-            return None
-        provider = llm.get("provider")
-        api_key = llm.get("apiKey")
-        if not isinstance(provider, str) or not isinstance(api_key, str):
-            return None
-        if not provider.strip() or not api_key.strip():
-            return None
-        return provider.strip().lower(), api_key
+        return read_legacy_llm_secret(_read_json_object(self.secrets_path))
 
     def read_llm_provider_secret(self, provider: str) -> str | None:
         """Read a provider-specific LLM API key from backend-only secrets."""
 
-        data = _read_json_object(self.secrets_path)
-        providers = data.get("llmProviders")
-        normalized_provider = provider.strip().lower()
-        if isinstance(providers, Mapping):
-            provider_secret = providers.get(normalized_provider)
-            if isinstance(provider_secret, Mapping):
-                api_key = provider_secret.get("apiKey")
-                if isinstance(api_key, str) and api_key.strip():
-                    return api_key
-        legacy_secret = self.read_secret()
-        if legacy_secret is not None and legacy_secret[0] == normalized_provider:
-            return legacy_secret[1]
-        return None
+        return read_provider_secret_data(
+            _read_json_object(self.secrets_path),
+            provider,
+        )
 
     def read_web_search_secret(self) -> tuple[str, str] | None:
         data = _read_json_object(self.secrets_path)
@@ -317,20 +271,27 @@ class FileSettingsConfigStore:
         _write_private_json(self.config_path, payload)
 
     def write_secret(self, *, provider: str, api_key: str, updated_at: datetime) -> None:
-        existing = {
-            key: value
-            for key, value in self._safe_secrets().items()
-            if key not in {"schemaVersion", "updatedAt", "llm"}
-        }
-        payload = {
-            "schemaVersion": _STORAGE_SCHEMA_VERSION,
-            "updatedAt": _timestamp(updated_at),
-            **existing,
-            "llm": {
-                "provider": provider,
-                "apiKey": api_key,
-            },
-        }
+        """Compatibility wrapper for callers using the v1 store API."""
+
+        self.write_llm_provider_secret(
+            provider=provider,
+            api_key=api_key,
+            updated_at=updated_at,
+        )
+
+    def write_llm_provider_secret(
+        self,
+        *,
+        provider: str,
+        api_key: str,
+        updated_at: datetime,
+    ) -> None:
+        payload = llm_provider_secret_payload(
+            self._safe_secrets(),
+            provider=provider,
+            api_key=api_key,
+            updated_at=updated_at,
+        )
         _write_private_json(self.secrets_path, payload)
 
     def write_web_search_secret(
@@ -346,7 +307,7 @@ class FileSettingsConfigStore:
             if key not in {"schemaVersion", "updatedAt", "webSearch"}
         }
         payload = {
-            "schemaVersion": _STORAGE_SCHEMA_VERSION,
+            "schemaVersion": SETTINGS_SECRETS_SCHEMA_VERSION,
             "updatedAt": _timestamp(updated_at),
             **existing,
             "webSearch": {
@@ -357,20 +318,13 @@ class FileSettingsConfigStore:
         _write_private_json(self.secrets_path, payload)
 
     def effective_env(self, base_env: Mapping[str, str]) -> dict[str, str]:
-        env = dict(base_env)
         config = self.read_config()
-        llm = config.get("llm")
-        if isinstance(llm, Mapping):
-            provider = llm.get("provider")
-            model = llm.get("model")
-            if isinstance(provider, str) and provider.strip():
-                env["LLM_PROVIDER"] = provider.strip().lower()
-            if isinstance(model, str) and model.strip():
-                env["LLM_MODEL"] = model.strip()
-        secret = self.read_secret()
-        provider = env.get("LLM_PROVIDER", DEFAULT_FIRST_RUN_LLM_PROVIDER).strip().lower()
-        if secret is not None and secret[0] == provider:
-            env[_preferred_api_key_env_var(provider)] = secret[1]
+        env = project_llm_effective_env(
+            config=config,
+            base_env=base_env,
+            store=self,
+            default_provider=DEFAULT_FIRST_RUN_LLM_PROVIDER,
+        )
         web_search = effective_web_search_settings(
             config=config,
             base_env=base_env,
@@ -381,12 +335,8 @@ class FileSettingsConfigStore:
         if web_search.fetch_enabled:
             env["PLATO_WEB_FETCH_ENABLED"] = "1"
             env["PLATO_WEB_FETCH_MAX_URLS"] = str(web_search.fetch_max_urls)
-            env["PLATO_WEB_FETCH_MAX_CHARS_PER_URL"] = str(
-                web_search.fetch_max_chars_per_url
-            )
-            env["PLATO_WEB_FETCH_MAX_TOTAL_CHARS"] = str(
-                web_search.fetch_max_total_chars
-            )
+            env["PLATO_WEB_FETCH_MAX_CHARS_PER_URL"] = str(web_search.fetch_max_chars_per_url)
+            env["PLATO_WEB_FETCH_MAX_TOTAL_CHARS"] = str(web_search.fetch_max_total_chars)
         if web_search.provider:
             env["PLATO_WEB_SEARCH_PROVIDER"] = web_search.provider
         if web_search.api_key is not None:
@@ -456,7 +406,11 @@ class DefaultSettingsConfigGateway:
         api_key = _api_key_replacement(parsed)
         if api_key is not None and isinstance(llm, Mapping):
             provider = str(llm["provider"])
-            store.write_secret(provider=provider, api_key=api_key, updated_at=now)
+            store.write_llm_provider_secret(
+                provider=provider,
+                api_key=api_key,
+                updated_at=now,
+            )
         web_search = updated.get("webSearch")
         web_search_api_key = _web_search_api_key_replacement(parsed)
         if web_search_api_key is not None and isinstance(web_search, Mapping):
@@ -528,12 +482,13 @@ def build_settings_config_summary(
 ) -> SettingsConfigSummary:
     config = store.read_config()
     effective_env = store.effective_env(env)
-    llm = _llm_summary(
+    llm = build_llm_summary(
         config,
         effective_env,
         base_env=env,
         store=store,
         default_model=default_model,
+        default_provider=DEFAULT_FIRST_RUN_LLM_PROVIDER,
     )
     logging = _logging_summary(
         workspace_root=workspace_root,
@@ -572,45 +527,6 @@ def build_settings_config_summary(
             bundle_export_available=True,
             http_export_route_available=True,
         ),
-    )
-
-
-def _llm_summary(
-    config: Mapping[str, Any],
-    effective_env: Mapping[str, str],
-    *,
-    base_env: Mapping[str, str],
-    store: FileSettingsConfigStore,
-    default_model: str,
-) -> SettingsConfigLlm:
-    stored_llm = config.get("llm")
-    provider_source: SettingsConfigSource = "default"
-    model_source: SettingsConfigSource = "default"
-    if isinstance(stored_llm, Mapping) and isinstance(stored_llm.get("provider"), str):
-        provider_source = "stored"
-    elif "LLM_PROVIDER" in base_env:
-        provider_source = "env"
-    if isinstance(stored_llm, Mapping) and isinstance(stored_llm.get("model"), str):
-        model_source = "stored"
-    elif "LLM_MODEL" in base_env:
-        model_source = "env"
-
-    provider = (
-        effective_env.get("LLM_PROVIDER", DEFAULT_FIRST_RUN_LLM_PROVIDER).strip().lower()
-        or "unknown"
-    )
-    model = effective_env.get("LLM_MODEL", default_model).strip() or default_model
-    api_key_source, api_key_env_var = _api_key_source(provider, base_env=base_env, store=store)
-
-    return SettingsConfigLlm(
-        provider=provider,
-        provider_source=provider_source,
-        provider_options=_provider_options(),
-        model=model,
-        model_source=model_source,
-        api_key_configured=api_key_source != "none",
-        api_key_source=api_key_source,
-        api_key_env_var=api_key_env_var,
     )
 
 
@@ -757,9 +673,7 @@ def _logging_summary(
         {"id": name, "description": profile.description}
         for name, profile in sorted(logging_config.profiles.items())
     )
-    selected_known = (
-        effective_selected is None or effective_selected in logging_config.profiles
-    )
+    selected_known = effective_selected is None or effective_selected in logging_config.profiles
     return SettingsConfigLogging(
         enabled=enabled,
         level=logging_config.default_level,
@@ -797,10 +711,7 @@ def _updated_config_data(
         if key not in {"schemaVersion", "updatedAt"}
     }
     if parsed.llm is not None:
-        updated["llm"] = {
-            "provider": parsed.llm.provider.strip().lower(),
-            "model": parsed.llm.model.strip(),
-        }
+        updated["llm"] = llm_config_update(parsed.llm)
     if parsed.logging is not None and "selected_profile" in parsed.logging.model_fields_set:
         raw_profile = parsed.logging.selected_profile
         selected_profile = raw_profile.strip() if isinstance(raw_profile, str) else None
@@ -811,9 +722,7 @@ def _updated_config_data(
             "provider": parsed.web_search.provider.strip().lower(),
             "mode": parsed.web_search.mode,
             "maxResults": parsed.web_search.max_results,
-            "fetchEnabled": bool(
-                parsed.web_search.enabled and parsed.web_search.fetch_enabled
-            ),
+            "fetchEnabled": bool(parsed.web_search.enabled and parsed.web_search.fetch_enabled),
             "fetchMaxUrls": parsed.web_search.fetch_max_urls,
             "fetchMaxCharsPerUrl": parsed.web_search.fetch_max_chars_per_url,
             "fetchMaxTotalChars": parsed.web_search.fetch_max_total_chars,
@@ -838,32 +747,24 @@ def _validate_update(
         else:
             provider = str(llm.get("provider", "")).strip().lower()
             model = str(llm.get("model", "")).strip()
-            if provider not in SUPPORTED_SETTINGS_PROVIDERS:
-                errors.append(
-                    SettingsConfigFieldError(
-                        path="llm.provider",
-                        message="unsupported provider",
-                        allowed_values=SUPPORTED_SETTINGS_PROVIDERS,
-                    )
-                )
-            if not model:
-                errors.append(
-                    SettingsConfigFieldError(
-                        path="llm.model",
-                        message="model must not be empty",
-                    )
-                )
-            if provider in SUPPORTED_SETTINGS_PROVIDERS and not _has_effective_api_key(
+            api_key_available = has_effective_llm_api_key(
                 provider,
-                parsed,
+                replacement=_api_key_replacement(parsed),
                 base_env=base_env,
                 store=store,
+            )
+            for issue in validate_llm_settings(
+                provider=provider,
+                model=model,
+                base_url=llm.get("baseUrl"),
+                api_key_available=api_key_available,
             ):
                 errors.append(
                     SettingsConfigFieldError(
-                        path="llm.apiKey",
-                        message="an API key is required for the selected provider",
-                        env_vars=_required_api_key_env_vars(provider),
+                        path=issue.path,
+                        message=issue.message,
+                        allowed_values=issue.allowed_values,
+                        env_vars=issue.env_vars,
                     )
                 )
 
@@ -877,9 +778,7 @@ def _validate_update(
                 logging_config = None
             if logging_config is None or selected_profile not in logging_config.profiles:
                 allowed = (
-                    tuple(sorted(logging_config.profiles))
-                    if logging_config is not None
-                    else ()
+                    tuple(sorted(logging_config.profiles)) if logging_config is not None else ()
                 )
                 errors.append(
                     SettingsConfigFieldError(
@@ -919,68 +818,25 @@ def _validate_update(
                     errors.append(
                         SettingsConfigFieldError(
                             path="webSearch.apiKey",
-                            message=(
-                                "an API key is required when web search is enabled"
-                            ),
+                            message=("an API key is required when web search is enabled"),
                             env_vars=_web_search_required_api_key_env_vars(provider),
                         )
                     )
     return errors
 
 
-def _has_effective_api_key(
-    provider: str,
-    parsed: UpdateSettingsConfigPayload,
-    *,
-    base_env: Mapping[str, str],
-    store: FileSettingsConfigStore,
-) -> bool:
-    api_key = _api_key_replacement(parsed)
-    if api_key is not None:
-        return True
-    secret = store.read_secret()
-    if secret is not None and secret[0] == provider and secret[1].strip():
-        return True
-    return any(bool(base_env.get(key, "").strip()) for key in _required_api_key_env_vars(provider))
-
-
 def _api_key_replacement(parsed: UpdateSettingsConfigPayload) -> str | None:
-    if parsed.llm is None or "api_key" not in parsed.llm.model_fields_set:
-        return None
-    raw = parsed.llm.api_key
-    if raw is None:
-        return None
-    stripped = raw.strip()
-    return stripped or None
+    return llm_api_key_replacement(parsed.llm)
 
 
 def _web_search_api_key_replacement(parsed: UpdateSettingsConfigPayload) -> str | None:
-    if (
-        parsed.web_search is None
-        or "api_key" not in parsed.web_search.model_fields_set
-    ):
+    if parsed.web_search is None or "api_key" not in parsed.web_search.model_fields_set:
         return None
     raw = parsed.web_search.api_key
     if raw is None:
         return None
     stripped = raw.strip()
     return stripped or None
-
-
-def _api_key_source(
-    provider: str,
-    *,
-    base_env: Mapping[str, str],
-    store: FileSettingsConfigStore,
-) -> tuple[SettingsApiKeySource, str]:
-    preferred_env_var = _preferred_api_key_env_var(provider)
-    secret = store.read_secret()
-    if secret is not None and secret[0] == provider:
-        return "stored", preferred_env_var
-    for key in _required_api_key_env_vars(provider):
-        if base_env.get(key, "").strip():
-            return "env", key
-    return "none", preferred_env_var
 
 
 def _web_search_api_key_source(
@@ -1014,18 +870,6 @@ def _effective_logging_profile(
     return raw if isinstance(raw, str) and raw.strip() else None
 
 
-def _provider_options() -> tuple[SettingsConfigProviderOption, ...]:
-    return tuple(
-        SettingsConfigProviderOption(
-            id=provider,
-            label=_PROVIDER_LABELS[provider],
-            required_api_key_env_vars=_required_api_key_env_vars(provider),
-            preferred_api_key_env_var=_preferred_api_key_env_var(provider),
-        )
-        for provider in SUPPORTED_SETTINGS_PROVIDERS
-    )
-
-
 def _web_search_provider_options() -> tuple[SettingsConfigWebSearchProviderOption, ...]:
     return tuple(
         SettingsConfigWebSearchProviderOption(
@@ -1036,18 +880,6 @@ def _web_search_provider_options() -> tuple[SettingsConfigWebSearchProviderOptio
         )
         for provider in SUPPORTED_WEB_SEARCH_PROVIDERS
     )
-
-
-def _required_api_key_env_vars(provider: str) -> tuple[str, ...]:
-    if provider == "deepseek":
-        return ("DEEPSEEK_API_KEY", "LLM_API_KEY")
-    if provider == "openrouter":
-        return ("OPENROUTER_API_KEY", "LLM_API_KEY")
-    return ("LLM_API_KEY",)
-
-
-def _preferred_api_key_env_var(provider: str) -> str:
-    return _required_api_key_env_vars(provider)[0]
 
 
 def _web_search_required_api_key_env_vars(provider: str) -> tuple[str, ...]:

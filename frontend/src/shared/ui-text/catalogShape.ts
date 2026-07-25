@@ -577,6 +577,7 @@ export type UiTextCatalog = {
     };
     fields: {
       apiKey: string;
+      baseUrl: string;
       bundle: string;
       defaultProfile: string;
       diagnostics: string;

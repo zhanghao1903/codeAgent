@@ -16,6 +16,10 @@ export function settingsProviderLabel(provider: string): string {
       return "DeepSeek";
     case "openrouter":
       return "OpenRouter";
+    case "openai":
+      return "OpenAI";
+    case "claude":
+      return "Claude";
     default:
       return provider;
   }

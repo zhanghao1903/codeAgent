@@ -25,6 +25,8 @@ def test_settings_config_summary_returns_safe_defaults(tmp_path: Path) -> None:
     assert summary["llm"]["providerSource"] == "default"
     assert summary["llm"]["model"] == "deepseek-v4-pro"
     assert summary["llm"]["modelSource"] == "default"
+    assert summary["llm"]["baseUrl"] is None
+    assert summary["llm"]["baseUrlSource"] == "default"
     assert summary["llm"]["apiKeyConfigured"] is False
     assert summary["llm"]["apiKeySource"] == "none"
     assert summary["llm"]["apiKeyEnvVar"] == "DEEPSEEK_API_KEY"
@@ -42,7 +44,7 @@ def test_settings_config_summary_returns_safe_defaults(tmp_path: Path) -> None:
     assert summary["webSearch"]["apiKeySource"] == "none"
     assert summary["webSearch"]["apiKeyEnvVar"] == "TAVILY_API_KEY"
     assert summary["webSearch"]["status"] == "disabled"
-    assert {"litellm", "deepseek", "openrouter"} == {
+    assert {"litellm", "deepseek", "openrouter", "openai", "claude"} == {
         option["id"] for option in summary["llm"]["providerOptions"]
     }
     assert summary["logging"]["selectedProfileKnown"] is True
@@ -81,6 +83,128 @@ def test_settings_config_update_persists_write_only_secret_and_refreshes_readine
     assert secret not in serialized
     assert secret not in store.config_path.read_text(encoding="utf-8")
     assert secret in store.secrets_path.read_text(encoding="utf-8")
+
+
+def test_settings_config_openai_persists_endpoint_and_projects_runtime_env(
+    tmp_path: Path,
+) -> None:
+    secret = "sk-openai-settings-secret"
+    configured_base_url = "http://127.0.0.1:11434/v1/"
+    base_url = "http://127.0.0.1:11434/v1"
+    gateway = DefaultSettingsConfigGateway(workspace_root=tmp_path, env={})
+
+    result = gateway.update_config(
+        {
+            "llm": {
+                "provider": "openai",
+                "baseUrl": configured_base_url,
+                "model": "local-openai-model",
+                "apiKey": secret,
+            }
+        }
+    )
+
+    store = FileSettingsConfigStore(tmp_path)
+    effective_env = store.effective_env({})
+    assert result["config"]["llm"]["provider"] == "openai"
+    assert result["config"]["llm"]["baseUrl"] == base_url
+    assert result["config"]["llm"]["baseUrlSource"] == "stored"
+    assert result["config"]["llm"]["apiKeyEnvVar"] == "OPENAI_API_KEY"
+    assert result["readiness"]["status"] == "ready"
+    assert effective_env["LLM_PROVIDER"] == "openai"
+    assert effective_env["LLM_MODEL"] == "local-openai-model"
+    assert effective_env["OPENAI_BASE_URL"] == base_url
+    assert effective_env["OPENAI_API_KEY"] == secret
+    assert secret not in json.dumps(result)
+    assert secret not in store.config_path.read_text(encoding="utf-8")
+
+
+def test_settings_config_claude_persists_endpoint_and_projects_runtime_env(
+    tmp_path: Path,
+) -> None:
+    secret = "sk-ant-claude-settings-secret"
+    base_url = "http://127.0.0.1:21434"
+    gateway = DefaultSettingsConfigGateway(workspace_root=tmp_path, env={})
+
+    result = gateway.update_config(
+        {
+            "llm": {
+                "provider": "claude",
+                "baseUrl": base_url,
+                "model": "claude-test-model",
+                "apiKey": secret,
+            }
+        }
+    )
+
+    store = FileSettingsConfigStore(tmp_path)
+    effective_env = store.effective_env({})
+    assert result["config"]["llm"]["provider"] == "claude"
+    assert result["config"]["llm"]["baseUrl"] == base_url
+    assert result["config"]["llm"]["baseUrlSource"] == "stored"
+    assert result["config"]["llm"]["apiKeyEnvVar"] == "ANTHROPIC_API_KEY"
+    assert result["readiness"]["status"] == "ready"
+    assert effective_env["LLM_PROVIDER"] == "claude"
+    assert effective_env["LLM_MODEL"] == "claude-test-model"
+    assert effective_env["ANTHROPIC_BASE_URL"] == base_url
+    assert effective_env["ANTHROPIC_API_KEY"] == secret
+    assert secret not in json.dumps(result)
+
+
+def test_settings_config_retains_provider_keys_across_provider_switches(
+    tmp_path: Path,
+) -> None:
+    gateway = DefaultSettingsConfigGateway(workspace_root=tmp_path, env={})
+    gateway.update_config(
+        {
+            "llm": {
+                "provider": "openai",
+                "model": "gpt-test",
+                "apiKey": "sk-openai-retained",
+            }
+        }
+    )
+    gateway.update_config(
+        {
+            "llm": {
+                "provider": "claude",
+                "model": "claude-test",
+                "apiKey": "sk-ant-claude-retained",
+            }
+        }
+    )
+
+    store = FileSettingsConfigStore(tmp_path)
+    secrets = json.loads(store.secrets_path.read_text(encoding="utf-8"))
+    assert secrets["schemaVersion"] == "plato.local_settings_secrets.v2"
+    assert secrets["llmProviders"]["openai"]["apiKey"] == "sk-openai-retained"
+    assert secrets["llmProviders"]["claude"]["apiKey"] == "sk-ant-claude-retained"
+    assert store.read_llm_provider_secret("openai") == "sk-openai-retained"
+    assert store.read_llm_provider_secret("claude") == "sk-ant-claude-retained"
+
+
+def test_settings_config_rejects_invalid_openai_base_url(tmp_path: Path) -> None:
+    gateway = DefaultSettingsConfigGateway(workspace_root=tmp_path, env={})
+
+    with pytest.raises(SettingsConfigValidationError) as exc_info:
+        gateway.update_config(
+            {
+                "llm": {
+                    "provider": "openai",
+                    "baseUrl": "file:///tmp/openai",
+                    "model": "test-model",
+                    "apiKey": "sk-do-not-echo",
+                }
+            }
+        )
+
+    api_error = exc_info.value.to_api_error().model_dump(mode="json")
+    assert api_error["details"]["fieldErrors"][0] == {
+        "path": "llm.baseUrl",
+        "message": "base URL must be an absolute HTTP or HTTPS URL",
+        "envVars": ["OPENAI_BASE_URL"],
+    }
+    assert "sk-do-not-echo" not in json.dumps(api_error)
 
 
 def test_settings_config_store_reads_provider_specific_llm_secret(
@@ -250,7 +374,7 @@ def test_settings_config_rejects_unsupported_provider_without_secret_echo(
     assert api_error["details"]["fieldErrors"][0] == {
         "path": "llm.provider",
         "message": "unsupported provider",
-        "allowedValues": ["litellm", "deepseek", "openrouter"],
+        "allowedValues": ["litellm", "deepseek", "openrouter", "openai", "claude"],
     }
     assert "sk-do-not-echo" not in json.dumps(api_error)
 

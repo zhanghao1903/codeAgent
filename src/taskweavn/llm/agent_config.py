@@ -8,6 +8,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from taskweavn.llm.contracts import ProviderRoutingConfig, ThinkingConfig
+from taskweavn.llm.provider_catalog import SUPPORTED_LLM_PROVIDERS
 
 AgentLlmRole = Literal[
     "runtime_input_router",
@@ -19,7 +20,7 @@ AgentLlmRole = Literal[
 ]
 
 AGENT_LLM_CONFIG_SCHEMA_VERSION = "plato.agent_llm_config.v1"
-SUPPORTED_AGENT_LLM_PROVIDERS = ("deepseek", "litellm", "openrouter")
+SUPPORTED_AGENT_LLM_PROVIDERS = SUPPORTED_LLM_PROVIDERS
 _MAX_INHERITANCE_DEPTH = 8
 
 

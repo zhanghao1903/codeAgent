@@ -784,6 +784,7 @@ export const enUS: UiTextCatalog = {
     },
     fields: {
       apiKey: "API key",
+      baseUrl: "Base URL",
       bundle: "Bundle",
       defaultProfile: "Default profile",
       diagnostics: "Diagnostics",

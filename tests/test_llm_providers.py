@@ -15,6 +15,7 @@ from taskweavn.llm import (
 from taskweavn.llm.errors import LLMCapabilityError
 from taskweavn.llm.providers.deepseek import DeepSeekProvider
 from taskweavn.llm.providers.litellm import LiteLLMProvider
+from taskweavn.llm.providers.openai import OpenAIProvider
 from taskweavn.llm.providers.openrouter import OpenRouterProvider
 
 
@@ -64,6 +65,70 @@ class _FakeDeepSeekClient:
     def _create(self, **kwargs: Any) -> Any:
         self.kwargs = kwargs
         return self._response
+
+
+def test_openai_provider_uses_configured_endpoint_and_chat_contract() -> None:
+    client = _FakeDeepSeekClient(_fake_response(content="ok"))
+    factory = MagicMock(return_value=client)
+    provider = OpenAIProvider(
+        api_key="sk",
+        base_url="https://gateway.example.test/v1/",
+        client_factory=factory,
+    )
+
+    result = provider.chat(
+        ChatRequest(
+            model="gpt-test",
+            messages=[
+                {
+                    "role": "assistant",
+                    "content": "prior",
+                    "reasoning_content": "private",
+                },
+                {"role": "user", "content": "continue"},
+            ],
+            tools=[{"type": "function"}],
+            timeout_seconds=12.0,
+        )
+    )
+
+    factory.assert_called_once_with(
+        api_key="sk",
+        base_url="https://gateway.example.test/v1",
+        max_retries=0,
+    )
+    assert client.kwargs is not None
+    assert client.kwargs["model"] == "gpt-test"
+    assert client.kwargs["timeout"] == 12.0
+    assert "reasoning_content" not in client.kwargs["messages"][0]
+    assert result.content == "ok"
+    assert result.provider_name == "openai"
+
+
+def test_openai_provider_derives_total_and_parses_standard_cached_tokens() -> None:
+    usage = {
+        "prompt_tokens": 100,
+        "completion_tokens": 12,
+        "prompt_tokens_details": {"cached_tokens": 75},
+    }
+    client = _FakeDeepSeekClient(_fake_response(content="ok", usage=usage))
+    provider = OpenAIProvider(api_key="sk", client=client)
+
+    result = provider.chat(
+        ChatRequest(
+            model="gpt-test",
+            messages=[{"role": "user", "content": "hello"}],
+        )
+    )
+
+    assert result.usage is not None
+    assert result.usage.input_tokens == 100
+    assert result.usage.output_tokens == 12
+    assert result.usage.total_tokens == 112
+    assert result.usage.cached_tokens == 75
+    assert result.usage.cache_hit_tokens == 75
+    assert result.usage.cache_miss_tokens is None
+    assert result.usage.cache_hit_ratio == 0.75
 
 
 def test_deepseek_thinking_request_and_reasoning_tool_call_preserved() -> None:
