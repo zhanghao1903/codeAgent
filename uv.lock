@@ -167,6 +167,26 @@ wheels = [
 ]
 
 [[package]]
+name = "anthropic"
+version = "0.119.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "anyio" },
+    { name = "distro" },
+    { name = "docstring-parser" },
+    { name = "httpx" },
+    { name = "jiter" },
+    { name = "pydantic", version = "2.12.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.15'" },
+    { name = "pydantic", version = "2.13.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.15'" },
+    { name = "sniffio" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/2a/c5/f1d53b7d27b25a7f491d39c5cd9d39805be2d115d7f7431a8bf22f286afe/anthropic-0.119.0.tar.gz", hash = "sha256:40a81b094ae2a0056a77771257943b19bd46edce1326e22f85c2794492097f0a", size = 999050, upload-time = "2026-07-23T17:34:40.233Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/dc/2e/5e90df53b474e856a3ae065c0df77e62bf58cb2df8819ec850d08b82518a/anthropic-0.119.0-py3-none-any.whl", hash = "sha256:2b39107077489d19d7c66000e9d9263293d431550fcf6b543ead785c6ac85962", size = 1012756, upload-time = "2026-07-23T17:34:41.896Z" },
+]
+
+[[package]]
 name = "anyio"
 version = "4.13.0"
 source = { registry = "https://pypi.org/simple" }
@@ -3068,6 +3088,7 @@ name = "taskweavn"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "anthropic" },
     { name = "app-control-protocol" },
     { name = "computer-use-macos", extra = ["accessibility"], marker = "sys_platform == 'darwin'" },
     { name = "docker" },
@@ -3094,6 +3115,7 @@ packaging = [
 
 [package.metadata]
 requires-dist = [
+    { name = "anthropic", specifier = ">=0.119.0" },
     { name = "app-control-protocol", specifier = ">=0.3.0,<0.4.0" },
     { name = "computer-use-macos", extras = ["accessibility"], marker = "sys_platform == 'darwin'", specifier = ">=0.3.0,<0.4.0" },
     { name = "docker", specifier = ">=7.0.0" },

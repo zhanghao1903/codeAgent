@@ -47,7 +47,7 @@ uv run taskweavn run \
 
 | 变量 | 可选值 / 示例 | 默认值 | 说明 |
 |---|---|---:|---|
-| `LLM_PROVIDER` | `litellm` / `deepseek` / `openrouter` | `litellm` | 选择 provider。 |
+| `LLM_PROVIDER` | `litellm` / `deepseek` / `openrouter` / `openai` / `claude` | `deepseek` | 选择 provider。 |
 | `LLM_MODEL` | `deepseek-chat`、`anthropic/...` | CLI 默认模型 | 当前主循环模型。 |
 | `LLM_API_KEY` | `sk-...` | 无 | 通用 API key。具体 provider key 优先级更高。 |
 
@@ -132,6 +132,44 @@ export OPENROUTER_PROVIDER_ONLY="Anthropic"
 export OPENROUTER_ALLOW_FALLBACKS=false
 export OPENROUTER_REQUIRE_PARAMETERS=true
 ```
+
+### 3.5 OpenAI provider
+
+OpenAI provider 使用 OpenAI SDK 的 Chat Completions 路径，并允许配置
+OpenAI-compatible endpoint。Plato 设置页对应提供 Base URL、Model 和
+write-only API key 三项配置。
+
+```bash
+export LLM_PROVIDER=openai
+export OPENAI_BASE_URL="https://api.openai.com/v1"
+export OPENAI_API_KEY="your-openai-api-key"
+export LLM_MODEL="your-openai-model"
+```
+
+| 变量 | 示例 | 默认值 | 说明 |
+|---|---|---:|---|
+| `OPENAI_BASE_URL` | `https://api.openai.com/v1` | `https://api.openai.com/v1` | OpenAI 或兼容服务 endpoint。 |
+| `OPENAI_API_KEY` | `sk-...` | 无 | OpenAI 专用 key，优先于 `LLM_API_KEY`。 |
+| `LLM_MODEL` | provider 可识别的模型 ID | CLI 默认模型 | 请求使用的模型。 |
+
+### 3.6 Claude provider
+
+Claude provider 使用官方 Anthropic SDK 的 Messages API。Plato 设置页提供 Base URL、
+Model 和 write-only API key 三项配置，并支持 Agent loop 的 function tool
+调用。当前不支持 Anthropic extended thinking 和多模态 content block。
+
+```bash
+export LLM_PROVIDER=claude
+export ANTHROPIC_BASE_URL="https://api.anthropic.com"
+export ANTHROPIC_API_KEY="your-anthropic-api-key"
+export LLM_MODEL="your-claude-model"
+```
+
+| 变量 | 示例 | 默认值 | 说明 |
+|---|---|---:|---|
+| `ANTHROPIC_BASE_URL` | `https://api.anthropic.com` | `https://api.anthropic.com` | Anthropic Messages API endpoint。 |
+| `ANTHROPIC_API_KEY` | `sk-ant-...` | 无 | Claude 专用 key，优先于 `LLM_API_KEY`。 |
+| `LLM_MODEL` | provider 可识别的模型 ID | CLI 默认模型 | 请求使用的模型。 |
 
 ---
 
@@ -417,6 +455,19 @@ export OPENROUTER_ALLOW_FALLBACKS=false
 
 uv run taskweavn run \
   --task "inspect this project and list the top three risks" \
+  --workspace .
+```
+
+### 9.4 OpenAI-compatible endpoint
+
+```bash
+export LLM_PROVIDER=openai
+export OPENAI_BASE_URL="https://api.openai.com/v1"
+export OPENAI_API_KEY="your-openai-api-key"
+export LLM_MODEL="your-openai-model"
+
+uv run taskweavn run \
+  --task "inspect this project and summarize its architecture" \
   --workspace .
 ```
 

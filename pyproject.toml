@@ -15,6 +15,7 @@ dependencies = [
     "app-control-protocol>=0.3.0,<0.4.0",
     "computer-use-macos[accessibility]>=0.3.0,<0.4.0; sys_platform == 'darwin'",
     "wechat-desktop-tool>=0.3.0,<0.4.0",
+    "anthropic>=0.119.0",
 ]
 
 [project.scripts]

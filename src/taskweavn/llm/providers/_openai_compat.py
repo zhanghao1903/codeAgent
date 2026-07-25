@@ -81,10 +81,18 @@ def _parse_usage(raw: Any) -> LLMUsage | None:
         cached_tokens = cache_hit_tokens
     if cache_hit_tokens is None:
         cache_hit_tokens = cached_tokens
+    output_tokens = _maybe_int(raw, "completion_tokens", "output_tokens")
+    total_tokens = _maybe_int(raw, "total_tokens")
+    if (
+        total_tokens is None
+        and input_tokens is not None
+        and output_tokens is not None
+    ):
+        total_tokens = input_tokens + output_tokens
     usage = LLMUsage(
         input_tokens=input_tokens,
-        output_tokens=_maybe_int(raw, "completion_tokens", "output_tokens"),
-        total_tokens=_maybe_int(raw, "total_tokens"),
+        output_tokens=output_tokens,
+        total_tokens=total_tokens,
         reasoning_tokens=_nested_int(raw, "completion_tokens_details", "reasoning_tokens"),
         cached_tokens=cached_tokens,
         cache_hit_tokens=cache_hit_tokens,

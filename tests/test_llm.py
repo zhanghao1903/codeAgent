@@ -29,6 +29,10 @@ def _clear_provider_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "LLM_MODEL",
         "LLM_REQUEST_TIMEOUT_SECONDS",
         "DEEPSEEK_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "ANTHROPIC_BASE_URL",
+        "OPENAI_API_KEY",
+        "OPENAI_BASE_URL",
         "OPENROUTER_API_KEY",
     ):
         monkeypatch.delenv(name, raising=False)
@@ -37,9 +41,7 @@ def _clear_provider_env(monkeypatch: pytest.MonkeyPatch) -> None:
 @patch("taskweavn.llm.client.LLM")
 def test_construct_passes_model_and_key(mock_llm_cls: MagicMock) -> None:
     LLMClient(model="anthropic/claude-sonnet-4-5", api_key="sk-test")
-    mock_llm_cls.assert_called_once_with(
-        model="anthropic/claude-sonnet-4-5", api_key="sk-test"
-    )
+    mock_llm_cls.assert_called_once_with(model="anthropic/claude-sonnet-4-5", api_key="sk-test")
 
 
 @patch("taskweavn.llm.client.LLM")
@@ -85,9 +87,7 @@ def test_from_env_uses_model_override(
     monkeypatch.setenv("LLM_API_KEY", "sk-env")
     monkeypatch.setenv("LLM_MODEL", "anthropic/claude-haiku-4-5")
     client = LLMClient.from_env()
-    mock_llm_cls.assert_called_once_with(
-        model="anthropic/claude-haiku-4-5", api_key="sk-env"
-    )
+    mock_llm_cls.assert_called_once_with(model="anthropic/claude-haiku-4-5", api_key="sk-env")
     assert client.request_timeout_seconds == 180.0
 
 
@@ -111,6 +111,52 @@ def test_from_env_uses_explicit_env_mapping(
         api_key="sk-workspace",
     )
     assert client.model == "deepseek-chat"
+
+
+@patch("taskweavn.llm.providers.openai.OpenAIProvider")
+def test_from_env_builds_openai_provider_with_configured_endpoint(
+    mock_provider_cls: MagicMock,
+) -> None:
+    provider = MagicMock()
+    mock_provider_cls.return_value = provider
+
+    client = LLMClient.from_env(
+        env={
+            "LLM_PROVIDER": "openai",
+            "OPENAI_API_KEY": "sk-openai",
+            "OPENAI_BASE_URL": "https://gateway.example.test/v1",
+            "LLM_MODEL": "gpt-test",
+        }
+    )
+
+    mock_provider_cls.assert_called_once_with(
+        api_key="sk-openai",
+        base_url="https://gateway.example.test/v1",
+    )
+    assert client.model == "gpt-test"
+
+
+@patch("taskweavn.llm.providers.claude.ClaudeProvider")
+def test_from_env_builds_claude_provider_with_configured_endpoint(
+    mock_provider_cls: MagicMock,
+) -> None:
+    provider = MagicMock()
+    mock_provider_cls.return_value = provider
+
+    client = LLMClient.from_env(
+        env={
+            "LLM_PROVIDER": "claude",
+            "ANTHROPIC_API_KEY": "sk-ant-claude",
+            "ANTHROPIC_BASE_URL": "https://gateway.example.test",
+            "LLM_MODEL": "claude-test",
+        }
+    )
+
+    mock_provider_cls.assert_called_once_with(
+        api_key="sk-ant-claude",
+        base_url="https://gateway.example.test",
+    )
+    assert client.model == "claude-test"
 
 
 @patch("taskweavn.llm.client.LLM")
@@ -160,9 +206,7 @@ def test_from_env_falls_back_to_default(
     _clear_provider_env(monkeypatch)
     monkeypatch.setenv("LLM_API_KEY", "sk-env")
     LLMClient.from_env(default_model="anthropic/some-default")
-    mock_llm_cls.assert_called_once_with(
-        model="anthropic/some-default", api_key="sk-env"
-    )
+    mock_llm_cls.assert_called_once_with(model="anthropic/some-default", api_key="sk-env")
 
 
 # ---------------------------------------------------------------------------

@@ -95,6 +95,81 @@ def test_invalid_llm_environment_maps_to_blocking_issues(tmp_path: Path) -> None
     }
 
 
+def test_openai_readiness_validates_key_model_and_base_url(tmp_path: Path) -> None:
+    report = build_settings_readiness_report(
+        workspace_root=tmp_path,
+        env={
+            "LLM_PROVIDER": "openai",
+            "LLM_MODEL": "gpt-test",
+            "OPENAI_API_KEY": "sk-openai-test",
+            "OPENAI_BASE_URL": "https://gateway.example.test/v1",
+        },
+        now=NOW,
+    ).to_contract_dict()
+
+    assert report["status"] == "ready"
+    assert report["llm"]["provider"] == "openai"
+    assert report["llm"]["apiKeyConfigured"] is True
+
+
+def test_openai_readiness_rejects_invalid_base_url(tmp_path: Path) -> None:
+    report = build_settings_readiness_report(
+        workspace_root=tmp_path,
+        env={
+            "LLM_PROVIDER": "openai",
+            "LLM_MODEL": "gpt-test",
+            "OPENAI_API_KEY": "sk-openai-test",
+            "OPENAI_BASE_URL": "not-a-url",
+        },
+        now=NOW,
+    ).to_contract_dict()
+
+    assert report["status"] == "needs_configuration"
+    assert report["firstRun"]["blockingIssueCodes"] == ["llm.invalid_base_url"]
+    assert report["blockingIssues"][0]["envVars"] == ["OPENAI_BASE_URL"]
+
+
+def test_claude_readiness_validates_key_model_and_base_url(tmp_path: Path) -> None:
+    report = build_settings_readiness_report(
+        workspace_root=tmp_path,
+        env={
+            "LLM_PROVIDER": "claude",
+            "LLM_MODEL": "claude-test",
+            "ANTHROPIC_API_KEY": "sk-ant-test",
+            "ANTHROPIC_BASE_URL": "https://gateway.example.test",
+        },
+        now=NOW,
+    ).to_contract_dict()
+
+    assert report["status"] == "ready"
+    assert report["llm"]["provider"] == "claude"
+    assert report["llm"]["apiKeyConfigured"] is True
+
+
+def test_claude_readiness_rejects_invalid_base_url_and_thinking(
+    tmp_path: Path,
+) -> None:
+    report = build_settings_readiness_report(
+        workspace_root=tmp_path,
+        env={
+            "LLM_PROVIDER": "claude",
+            "LLM_MODEL": "claude-test",
+            "ANTHROPIC_API_KEY": "sk-ant-test",
+            "ANTHROPIC_BASE_URL": "not-a-url",
+            "LLM_THINKING_ENABLED": "true",
+        },
+        now=NOW,
+    ).to_contract_dict()
+
+    assert report["status"] == "needs_configuration"
+    assert report["firstRun"]["blockingIssueCodes"] == [
+        "llm.invalid_base_url",
+        "llm.unsupported_thinking",
+    ]
+    assert report["blockingIssues"][0]["envVars"] == ["ANTHROPIC_BASE_URL"]
+    assert report["blockingIssues"][1]["envVars"] == ["LLM_THINKING_ENABLED"]
+
+
 def test_logging_profiles_and_diagnostics_are_discoverable(tmp_path: Path) -> None:
     report = build_settings_readiness_report(
         workspace_root=tmp_path,

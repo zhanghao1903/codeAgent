@@ -763,6 +763,7 @@ export const zhCN: UiTextCatalog = {
     },
     fields: {
       apiKey: "API 密钥",
+      baseUrl: "Base URL",
       bundle: "诊断包",
       defaultProfile: "默认配置",
       diagnostics: "诊断",

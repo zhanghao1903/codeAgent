@@ -176,6 +176,90 @@ describe("SettingsRoute", () => {
     expect(globalThis.location.pathname).toBe("/");
   });
 
+  it("saves OpenAI base URL, model, and write-only key", async () => {
+    const user = userEvent.setup();
+    const api = settingsApi({
+      config: settingsConfig({ apiKeyConfigured: false }),
+    });
+
+    renderWithQueryClient(
+      <SettingsRoute api={api} runtimeEnv={{ VITE_PLATO_API_MODE: "http" }} />,
+    );
+
+    await user.selectOptions(await screen.findByLabelText("Provider"), "openai");
+    expect(screen.getByLabelText("Base URL")).toHaveValue(
+      "https://api.openai.com/v1",
+    );
+    await user.clear(screen.getByLabelText("Base URL"));
+    await user.type(
+      screen.getByLabelText("Base URL"),
+      "https://gateway.example.test/v1",
+    );
+    await user.clear(screen.getByLabelText("Model"));
+    await user.type(screen.getByLabelText("Model"), "gpt-test");
+    await user.type(screen.getByLabelText("API key"), "sk-openai-route-secret");
+    await user.click(screen.getByRole("button", { name: "Save and check" }));
+
+    await waitFor(() => {
+      expect(api.updateSettingsConfig).toHaveBeenCalledWith(
+        expect.objectContaining({
+          llm: {
+            apiKey: "sk-openai-route-secret",
+            baseUrl: "https://gateway.example.test/v1",
+            model: "gpt-test",
+            provider: "openai",
+          },
+        }),
+      );
+    });
+    expect(document.body).not.toHaveTextContent("sk-openai-route-secret");
+  });
+
+  it("saves Claude base URL, model, and write-only key", async () => {
+    const user = userEvent.setup();
+    const api = settingsApi({
+      config: settingsConfig({ apiKeyConfigured: true }),
+    });
+
+    renderWithQueryClient(
+      <SettingsRoute api={api} runtimeEnv={{ VITE_PLATO_API_MODE: "http" }} />,
+    );
+
+    await user.type(await screen.findByLabelText("API key"), "unsaved-old-key");
+    await user.selectOptions(await screen.findByLabelText("Provider"), "claude");
+    expect(screen.getByLabelText("Base URL")).toHaveValue(
+      "https://api.anthropic.com",
+    );
+    expect(screen.getByLabelText("Model")).toHaveValue("");
+    expect(screen.getByLabelText("API key")).toHaveValue("");
+    expect(
+      screen.getByText("Required: ANTHROPIC_API_KEY or LLM_API_KEY."),
+    ).toBeInTheDocument();
+    await user.clear(screen.getByLabelText("Base URL"));
+    await user.type(
+      screen.getByLabelText("Base URL"),
+      "https://anthropic-gateway.example.test",
+    );
+    await user.clear(screen.getByLabelText("Model"));
+    await user.type(screen.getByLabelText("Model"), "claude-test");
+    await user.type(screen.getByLabelText("API key"), "sk-ant-route-secret");
+    await user.click(screen.getByRole("button", { name: "Save and check" }));
+
+    await waitFor(() => {
+      expect(api.updateSettingsConfig).toHaveBeenCalledWith(
+        expect.objectContaining({
+          llm: {
+            apiKey: "sk-ant-route-secret",
+            baseUrl: "https://anthropic-gateway.example.test",
+            model: "claude-test",
+            provider: "claude",
+          },
+        }),
+      );
+    });
+    expect(document.body).not.toHaveTextContent("sk-ant-route-secret");
+  });
+
   it("shows structured save failures without keeping the secret field populated", async () => {
     const user = userEvent.setup();
     const apiError: ApiError = {
@@ -839,6 +923,22 @@ function settingsConfig({
           label: "DeepSeek",
           preferredApiKeyEnvVar: "DEEPSEEK_API_KEY",
           requiredApiKeyEnvVars: ["DEEPSEEK_API_KEY", "LLM_API_KEY"],
+        },
+        {
+          baseUrlEnvVar: "OPENAI_BASE_URL",
+          defaultBaseUrl: "https://api.openai.com/v1",
+          id: "openai",
+          label: "OpenAI",
+          preferredApiKeyEnvVar: "OPENAI_API_KEY",
+          requiredApiKeyEnvVars: ["OPENAI_API_KEY", "LLM_API_KEY"],
+        },
+        {
+          baseUrlEnvVar: "ANTHROPIC_BASE_URL",
+          defaultBaseUrl: "https://api.anthropic.com",
+          id: "claude",
+          label: "Claude",
+          preferredApiKeyEnvVar: "ANTHROPIC_API_KEY",
+          requiredApiKeyEnvVars: ["ANTHROPIC_API_KEY", "LLM_API_KEY"],
         },
       ],
       providerSource: "stored",

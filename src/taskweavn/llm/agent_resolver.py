@@ -14,6 +14,10 @@ from taskweavn.llm.agent_config import (
     resolve_agent_llm_profile,
 )
 from taskweavn.llm.client import LazyLLMClient
+from taskweavn.llm.provider_catalog import (
+    preferred_api_key_env_var,
+    required_api_key_env_vars,
+)
 from taskweavn.usage import UsageRecordingLLM
 from taskweavn.usage.recording import TaskPlanResolver, TokenUsageEventSink
 
@@ -83,7 +87,7 @@ class SettingsBackedAgentLlmResolver:
             env["LLM_REQUEST_TIMEOUT_SECONDS"] = str(profile.timeout_seconds)
         api_key = self._api_key_for(profile.provider, fallback_env=env)
         if api_key is not None:
-            env[_preferred_api_key_env_var(profile.provider)] = api_key
+            env[preferred_api_key_env_var(profile.provider)] = api_key
         return env
 
     def _api_key_for(
@@ -95,7 +99,7 @@ class SettingsBackedAgentLlmResolver:
         secret = self.settings_store.read_llm_provider_secret(provider)
         if secret is not None:
             return secret
-        for env_var in _required_api_key_env_vars(provider):
+        for env_var in required_api_key_env_vars(provider):
             value = fallback_env.get(env_var, "").strip()
             if value:
                 return value
@@ -149,21 +153,6 @@ class AgentConfiguredLLM:
 
     def count_tokens(self, *args: Any, **kwargs: Any) -> Any:
         return self.inner.count_tokens(*args, **kwargs)
-
-
-def _required_api_key_env_vars(provider: str) -> tuple[str, ...]:
-    normalized = provider.strip().lower()
-    if normalized == "deepseek":
-        return ("DEEPSEEK_API_KEY", "LLM_API_KEY")
-    if normalized == "openrouter":
-        return ("OPENROUTER_API_KEY", "LLM_API_KEY")
-    if normalized == "litellm":
-        return ("LLM_API_KEY",)
-    return ("LLM_API_KEY",)
-
-
-def _preferred_api_key_env_var(provider: str) -> str:
-    return _required_api_key_env_vars(provider)[0]
 
 
 __all__ = [

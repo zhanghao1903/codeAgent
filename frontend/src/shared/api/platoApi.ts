@@ -371,7 +371,12 @@ export type SettingsReadinessReport = {
   warnings: SettingsReadinessIssue[];
 };
 
-export type SettingsProvider = "litellm" | "deepseek" | "openrouter";
+export type SettingsProvider =
+  | "litellm"
+  | "deepseek"
+  | "openrouter"
+  | "openai"
+  | "claude";
 
 export type SettingsWebSearchProvider = "tavily";
 
@@ -386,6 +391,8 @@ export type SettingsConfigProviderOption = {
   label: string;
   requiredApiKeyEnvVars: string[];
   preferredApiKeyEnvVar: string;
+  baseUrlEnvVar?: string | null;
+  defaultBaseUrl?: string | null;
 };
 
 export type SettingsConfigWebSearchProviderOption = {
@@ -405,6 +412,8 @@ export type SettingsConfigSummary = {
     providerOptions: SettingsConfigProviderOption[];
     model: string;
     modelSource: SettingsConfigSource;
+    baseUrl?: string | null;
+    baseUrlSource?: SettingsConfigSource;
     apiKeyConfigured: boolean;
     apiKeySource: SettingsApiKeySource;
     apiKeyEnvVar: string;
@@ -445,6 +454,7 @@ export type UpdateSettingsConfigPayload = {
   llm?: {
     provider: SettingsProvider;
     model: string;
+    baseUrl?: string;
     apiKey?: string;
   };
   logging?: {

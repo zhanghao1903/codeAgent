@@ -10,7 +10,6 @@ import type {
   DiagnosticBundleExportResult,
   PlatoApi,
   ProductRecoveryAction,
-  SettingsConfigSummary,
   SettingsConfigUpdateResult,
   SettingsReadinessReport,
   SettingsWebSearchStatus,
@@ -26,15 +25,18 @@ import {
   type UiLocale,
   type UiTextCatalog,
 } from "../../shared/ui-text";
-import { formatRecoveryAction, settingsProviderLabel } from "./settingsCopy";
+import { formatRecoveryAction } from "./settingsCopy";
 import { SettingsComputerUseReadiness } from "./SettingsComputerUseReadiness";
 import { SettingsDataManagementTab } from "./SettingsDataManagementTab";
+import {
+  SettingsLlmSection,
+  SettingsLlmSummary,
+} from "./SettingsLlmSection";
 import { SettingsRuntimeBehaviorTab } from "./SettingsRuntimeBehaviorTab";
 import { SettingsUsageInformationTab } from "./SettingsUsageInformationTab";
 import type { SettingsRouteContext, SettingsTab } from "./settingsRouteModel";
 import { buildSettingsRoute, parseSettingsRouteLocation } from "./settingsRouteModel";
 import {
-  apiKeyHint,
   fieldErrorFor,
   fieldErrorsFromApiError,
   formStateFromConfig,
@@ -43,7 +45,7 @@ import {
   normalizeWebFetchMaxTotalChars,
   normalizeWebFetchMaxUrls,
   normalizeWebSearchMaxResults,
-  providerOptions,
+  providerUsesBaseUrl,
   webSearchApiKeyHint,
   webSearchProviderOptions,
   type SettingsFieldError,
@@ -260,6 +262,9 @@ export function SettingsRoute({
       const update = await settingsApi.updateSettingsConfig({
         llm: {
           ...(form.apiKey.trim() ? { apiKey: form.apiKey.trim() } : {}),
+          ...(providerUsesBaseUrl(form.provider, config)
+            ? { baseUrl: form.baseUrl.trim() }
+            : {}),
           model: form.model.trim(),
           provider: form.provider,
         },
@@ -383,7 +388,7 @@ export function SettingsRoute({
         />
       ) : (
         <>
-          <SettingsSummary config={config} readiness={readiness} />
+          <SettingsLlmSummary config={config} readiness={readiness} />
           <form
             aria-label={uiText.settings.labels.settingsSetupForm}
             className={styles.form}
@@ -392,77 +397,17 @@ export function SettingsRoute({
               void saveAndCheck();
             }}
           >
+            <SettingsLlmSection
+              config={config}
+              disabled={
+                saveState.kind === "saving" ||
+                saveState.kind === "rechecking"
+              }
+              fieldErrors={fieldErrors}
+              form={form}
+              onChange={setForm}
+            />
             <div className={styles.formGrid}>
-              <label className={styles.field}>
-                <span>{uiText.settings.fields.provider}</span>
-                <select
-                  aria-label={uiText.settings.fields.provider}
-                  disabled={
-                    saveState.kind === "saving" ||
-                    saveState.kind === "rechecking"
-                  }
-                  name="provider"
-                  onChange={(event) =>
-                    setForm({
-                      ...form,
-                      provider: event.target
-                        .value as SettingsFormState["provider"],
-                    })
-                  }
-                  value={form.provider}
-                >
-                  {providerOptions(config).map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className={styles.field}>
-                <span>{uiText.settings.fields.model}</span>
-                <input
-                  aria-label={uiText.settings.fields.model}
-                  disabled={
-                    saveState.kind === "saving" ||
-                    saveState.kind === "rechecking"
-                  }
-                  name="model"
-                  onChange={(event) =>
-                    setForm({ ...form, model: event.target.value })
-                  }
-                  required
-                  type="text"
-                  value={form.model}
-                />
-                <FieldError errors={fieldErrors} path="llm.model" />
-              </label>
-              <label className={styles.field}>
-                <span>{uiText.settings.fields.apiKey}</span>
-                <input
-                  aria-label={uiText.settings.fields.apiKey}
-                  autoComplete="off"
-                  disabled={
-                    saveState.kind === "saving" ||
-                    saveState.kind === "rechecking"
-                  }
-                  name="apiKey"
-                  onChange={(event) =>
-                    setForm({ ...form, apiKey: event.target.value })
-                  }
-                  type="password"
-                  value={form.apiKey}
-                />
-                <small>
-                  {config.llm.apiKeyConfigured
-                    ? uiText.settings.messages.apiKeyConfigured({
-                        source: config.llm.apiKeySource,
-                      })
-                    : uiText.settings.messages.apiKeyRequired({
-                        hint: apiKeyHint(form.provider, config),
-                      })}
-                </small>
-                <FieldError errors={fieldErrors} path="llm.apiKey" />
-              </label>
               <label className={styles.field}>
                 <span>{uiText.settings.fields.loggingProfile}</span>
                 <select
@@ -893,41 +838,6 @@ function SettingsTabs({
         );
       })}
     </nav>
-  );
-}
-
-function SettingsSummary({
-  config,
-  readiness,
-}: {
-  config: SettingsConfigSummary;
-  readiness: SettingsReadinessReport | null;
-}) {
-  const uiText = useUiText();
-
-  return (
-    <dl className={styles.summaryGrid}>
-      <div>
-        <dt>{uiText.settings.fields.provider}</dt>
-        <dd>{settingsProviderLabel(config.llm.provider)}</dd>
-      </div>
-      <div>
-        <dt>{uiText.settings.fields.model}</dt>
-        <dd>{config.llm.model}</dd>
-      </div>
-      <div>
-        <dt>{uiText.settings.fields.apiKey}</dt>
-        <dd>
-          {config.llm.apiKeyConfigured
-            ? uiText.settings.labels.configured
-            : uiText.settings.labels.missing}
-        </dd>
-      </div>
-      <div>
-        <dt>{uiText.settings.fields.readiness}</dt>
-        <dd>{readiness?.status ?? uiText.settings.labels.notChecked}</dd>
-      </div>
-    </dl>
   );
 }
 

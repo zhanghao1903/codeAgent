@@ -8,6 +8,7 @@ import { settingsProviderLabel } from "./settingsCopy";
 
 export type SettingsFormState = {
   apiKey: string;
+  baseUrl: string;
   model: string;
   provider: SettingsProvider;
   selectedProfile: string;
@@ -35,6 +36,8 @@ const fallbackProviders: SettingsProvider[] = [
   "deepseek",
   "litellm",
   "openrouter",
+  "openai",
+  "claude",
 ];
 
 export function formStateFromConfig(
@@ -42,6 +45,12 @@ export function formStateFromConfig(
 ): SettingsFormState {
   return {
     apiKey: "",
+    baseUrl:
+      config.llm.baseUrl ??
+      defaultBaseUrlForProvider(
+        normalizeSettingsProvider(config.llm.provider),
+        config,
+      ),
     model: config.llm.model,
     provider: normalizeSettingsProvider(config.llm.provider),
     selectedProfile: config.logging.selectedProfile ?? "",
@@ -68,6 +77,18 @@ export function providerOptions(config: SettingsConfigSummary | null) {
   const options = config?.llm.providerOptions.length
     ? config.llm.providerOptions
     : fallbackProviders.map((provider) => ({
+        baseUrlEnvVar:
+          provider === "openai"
+            ? "OPENAI_BASE_URL"
+            : provider === "claude"
+              ? "ANTHROPIC_BASE_URL"
+              : null,
+        defaultBaseUrl:
+          provider === "openai"
+            ? "https://api.openai.com/v1"
+            : provider === "claude"
+              ? "https://api.anthropic.com"
+              : null,
         id: provider,
         label: settingsProviderLabel(provider),
         preferredApiKeyEnvVar: preferredApiKeyEnvVar(provider),
@@ -133,6 +154,31 @@ export function apiKeyHint(
       ? matched?.requiredApiKeyEnvVars
       : requiredApiKeyEnvVars(provider);
   return (envVars ?? requiredApiKeyEnvVars(provider)).join(" or ");
+}
+
+export function defaultBaseUrlForProvider(
+  provider: SettingsProvider,
+  config: SettingsConfigSummary | null,
+): string {
+  const matched = providerOptions(config).find((option) => option.id === provider);
+  if (typeof matched?.defaultBaseUrl === "string") {
+    return matched.defaultBaseUrl;
+  }
+  if (provider === "openai") {
+    return "https://api.openai.com/v1";
+  }
+  if (provider === "claude") {
+    return "https://api.anthropic.com";
+  }
+  return "";
+}
+
+export function providerUsesBaseUrl(
+  provider: SettingsProvider,
+  config: SettingsConfigSummary | null,
+): boolean {
+  const matched = providerOptions(config).find((option) => option.id === provider);
+  return typeof matched?.baseUrlEnvVar === "string" && matched.baseUrlEnvVar.length > 0;
 }
 
 export function webSearchApiKeyHint(
@@ -225,6 +271,12 @@ function requiredApiKeyEnvVars(provider: SettingsProvider): string[] {
   }
   if (provider === "openrouter") {
     return ["OPENROUTER_API_KEY", "LLM_API_KEY"];
+  }
+  if (provider === "openai") {
+    return ["OPENAI_API_KEY", "LLM_API_KEY"];
+  }
+  if (provider === "claude") {
+    return ["ANTHROPIC_API_KEY", "LLM_API_KEY"];
   }
   return ["LLM_API_KEY"];
 }

@@ -13,6 +13,13 @@ from taskweavn.llm.config import (
     DEFAULT_LLM_PROVIDER,
     DEFAULT_LLM_REQUEST_TIMEOUT_SECONDS,
 )
+from taskweavn.llm.provider_catalog import (
+    SUPPORTED_LLM_PROVIDERS,
+    base_url_env_var,
+    default_base_url,
+    required_api_key_env_vars,
+    validate_provider_base_url,
+)
 from taskweavn.observability import build_session_logging_config
 from taskweavn.product_errors import ProductRecoveryAction
 from taskweavn.server.ui_contract.base import UiContractModel
@@ -26,7 +33,7 @@ DEFAULT_FIRST_RUN_LLM_MODEL = "deepseek-v4-pro"
 SettingsReadinessStatus = Literal["ready", "needs_configuration", "degraded"]
 SettingsReadinessIssueSeverity = Literal["blocking", "warning"]
 
-_SUPPORTED_PROVIDERS = ("litellm", "deepseek", "openrouter")
+_SUPPORTED_PROVIDERS = SUPPORTED_LLM_PROVIDERS
 _OPENROUTER_BOOL_ENV_VARS = (
     "OPENROUTER_ALLOW_FALLBACKS",
     "OPENROUTER_REQUIRE_PARAMETERS",
@@ -102,9 +109,7 @@ class SettingsReadinessDiagnostics(UiContractModel):
 
 
 class SettingsReadinessReport(UiContractModel):
-    schema_version: Literal["plato.settings_readiness.v1"] = (
-        SETTINGS_READINESS_SCHEMA_VERSION
-    )
+    schema_version: Literal["plato.settings_readiness.v1"] = SETTINGS_READINESS_SCHEMA_VERSION
     generated_at: datetime
     workspace_root_label: str = "workspace://current"
     status: SettingsReadinessStatus
@@ -201,9 +206,7 @@ def _llm_readiness(
     default_model: str,
     issues: list[SettingsReadinessIssue],
 ) -> SettingsReadinessLlm:
-    provider_source: Literal["default", "env"] = (
-        "env" if "LLM_PROVIDER" in env else "default"
-    )
+    provider_source: Literal["default", "env"] = "env" if "LLM_PROVIDER" in env else "default"
     provider = env.get("LLM_PROVIDER", DEFAULT_FIRST_RUN_LLM_PROVIDER).strip().lower()
     provider_for_payload = provider or "unknown"
     model_source: Literal["default", "env"] = "env" if "LLM_MODEL" in env else "default"
@@ -216,13 +219,13 @@ def _llm_readiness(
             SettingsReadinessIssue(
                 code="llm.invalid_provider",
                 severity="blocking",
-                message="LLM_PROVIDER must be one of: litellm, deepseek, openrouter.",
+                message=("LLM_PROVIDER must be one of: " + ", ".join(_SUPPORTED_PROVIDERS) + "."),
                 recovery_actions=("open_settings",),
                 env_vars=("LLM_PROVIDER",),
             )
         )
     else:
-        required_api_vars = _required_api_key_env_vars(provider)
+        required_api_vars = required_api_key_env_vars(provider)
         api_key_configured = any(_has_env_value(env, key) for key in required_api_vars)
         if not api_key_configured:
             missing_env_vars = required_api_vars
@@ -235,6 +238,23 @@ def _llm_readiness(
                     env_vars=required_api_vars,
                 )
             )
+        endpoint_env_var = base_url_env_var(provider)
+        if endpoint_env_var is not None:
+            try:
+                validate_provider_base_url(
+                    provider,
+                    env.get(endpoint_env_var, default_base_url(provider) or ""),
+                )
+            except ValueError as exc:
+                issues.append(
+                    SettingsReadinessIssue(
+                        code="llm.invalid_base_url",
+                        severity="blocking",
+                        message=str(exc),
+                        recovery_actions=("open_settings",),
+                        env_vars=(endpoint_env_var,),
+                    )
+                )
 
     if not model.strip():
         issues.append(
@@ -249,6 +269,19 @@ def _llm_readiness(
 
     request_timeout_seconds, request_timeout_valid = _request_timeout(env, issues)
     thinking = _thinking_readiness(env, issues)
+    if provider == "claude" and thinking.enabled:
+        issues.append(
+            SettingsReadinessIssue(
+                code="llm.unsupported_thinking",
+                severity="blocking",
+                message=(
+                    "The Claude provider does not support the configured "
+                    "provider-neutral thinking mode."
+                ),
+                recovery_actions=("open_settings",),
+                env_vars=("LLM_THINKING_ENABLED",),
+            )
+        )
     routing = _openrouter_routing_readiness(env, issues) if provider == "openrouter" else None
 
     return SettingsReadinessLlm(
@@ -301,9 +334,7 @@ def _logging_readiness(
         SettingsReadinessLoggingProfile(id=name, description=profile.description)
         for name, profile in sorted(config.profiles.items())
     )
-    selected_profile_known = (
-        selected_profile is None or selected_profile in config.profiles
-    )
+    selected_profile_known = selected_profile is None or selected_profile in config.profiles
     if not selected_profile_known:
         issues.append(
             SettingsReadinessIssue(
@@ -426,14 +457,6 @@ def _openrouter_routing_readiness(
         data_collection_configured="OPENROUTER_DATA_COLLECTION" in env,
         zdr=bool_values["OPENROUTER_ZDR"],
     )
-
-
-def _required_api_key_env_vars(provider: str) -> tuple[str, ...]:
-    if provider == "deepseek":
-        return ("DEEPSEEK_API_KEY", "LLM_API_KEY")
-    if provider == "openrouter":
-        return ("OPENROUTER_API_KEY", "LLM_API_KEY")
-    return ("LLM_API_KEY",)
 
 
 def _has_env_value(env: Mapping[str, str], key: str) -> bool:

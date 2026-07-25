@@ -176,6 +176,28 @@ Provider-reported cache hit rate and Context Manager stable-prefix metadata are
 separate facts. The API may later expose both, but must not combine them into a
 single misleading metric.
 
+### 5.1 Provider normalization
+
+OpenAI-compatible responses use the provider-reported prompt/input counter as
+`inputTokens`. Standard `prompt_tokens_details.cached_tokens`, or a compatible
+provider cache-hit counter, maps to both `cachedTokens` and `cacheHitTokens`.
+
+Anthropic reports mutually exclusive input-token buckets. Normalize them as:
+
+```text
+inputTokens =
+  input_tokens
+  + cache_creation_input_tokens
+  + cache_read_input_tokens
+
+totalTokens = inputTokens + output_tokens
+cacheHitTokens = cache_read_input_tokens
+```
+
+`cache_creation_input_tokens` contributes to the full input and total token
+counts, but it is a cache write rather than an explicit cache miss. It must not
+populate `cacheMissTokens`.
+
 ## 6. API Endpoints
 
 Workspace-scoped Product 1.1 endpoints:
