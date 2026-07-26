@@ -81,13 +81,6 @@ class GuardedLLMReadOnlyInquiryAnswerProvider:
         evidence_refs: tuple[ReadOnlyInquiryEvidenceRef, ...],
         warnings: tuple[ReadOnlyInquiryWarning, ...] = (),
     ) -> ReadOnlyInquiryAnswerProviderResult:
-        if not evidence_refs and self.web_search_provider is None:
-            return _fallback(
-                baseline_answer,
-                evidence_refs,
-                warnings,
-                _provider_warning("LLM answer provider requires cited evidence."),
-            )
         web_search_attempted = False
         try:
             metadata = {
@@ -278,6 +271,7 @@ _VALID_STATUSES: set[str] = {
     "rejected",
 }
 _VALID_CONFIDENCE: set[str] = {"high", "medium", "low"}
+_VALID_ANSWER_MODES: set[str] = {"self_contained", "evidence_based"}
 _MUTATING_KEYS: set[str] = {
     "action",
     "actions",
@@ -342,8 +336,20 @@ def _messages(
         "outputRules": {
             "format": "json_object",
             "allowedStatus": sorted(_VALID_STATUSES),
+            "allowedAnswerModes": sorted(_VALID_ANSWER_MODES),
             "maxAnswerChars": max_answer_chars,
             "maxCitedRefs": max_cited_refs,
+            "citationPolicy": {
+                "self_contained": (
+                    "Use only for an answer derived from the question and stable "
+                    "general knowledge or reasoning. Do not use supplied evidence; "
+                    "citedRefIds must be empty."
+                ),
+                "evidence_based": (
+                    "Use whenever the answer depends on Plato, workspace, time-sensitive, "
+                    "or web evidence. Cite at least one supplied evidence ref."
+                ),
+            },
         },
     }
     return [
@@ -358,8 +364,14 @@ def _messages(
                 "relative dates such as today, tomorrow, yesterday, this week, "
                 "and next week before answering. If external evidence conflicts "
                 "with the resolved date, say the answer is uncertain instead of "
-                "guessing. Return only JSON with keys: status, body, confidence, "
-                "citedRefIds."
+                "guessing. For every answered result, explicitly choose answerMode "
+                "self_contained or evidence_based. self_contained is only for stable "
+                "general knowledge or reasoning that does not use supplied evidence "
+                "and must have no citations. evidence_based is required whenever the "
+                "answer uses Plato, workspace, time-sensitive, or web evidence and "
+                "must cite at least one supplied ref. If required evidence is missing, "
+                "return unsupported or needs_clarification instead of guessing. Return "
+                "only JSON with keys: status, answerMode, body, confidence, citedRefIds."
             ),
         },
         {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
@@ -480,8 +492,6 @@ def _validated_payload(
     cited_refs = tuple(known_refs[ref_id] for ref_id in cited_ref_ids if ref_id in known_refs)
     if cited_ref_ids and len(cited_refs) != len(cited_ref_ids):
         return None
-    if status == "answered" and not cited_refs:
-        return None
 
     if status != "answered":
         return _ValidatedProviderPayload(
@@ -496,6 +506,27 @@ def _validated_payload(
                         else "inquiry.unsupported_question"
                     ),
                     message="LLM answer provider could not produce a safe answer.",
+                ),
+            ),
+        )
+
+    answer_mode = payload.get("answerMode")
+    if not isinstance(answer_mode, str) or answer_mode not in _VALID_ANSWER_MODES:
+        return None
+    if answer_mode == "self_contained" and cited_refs:
+        return None
+    if answer_mode == "evidence_based" and not cited_refs:
+        return _ValidatedProviderPayload(
+            status="unsupported",
+            answer=None,
+            evidence_refs=evidence_refs,
+            warnings=(
+                ReadOnlyInquiryWarning(
+                    code="inquiry.citation_required",
+                    message=(
+                        "Evidence-based answers must cite at least one supplied "
+                        "evidence ref. No answer was displayed."
+                    ),
                 ),
             ),
         )
@@ -587,7 +618,10 @@ def _embedded_json_payload(content: str) -> dict[str, Any] | None:
 
 
 def _looks_like_answer_payload(payload: dict[str, Any]) -> bool:
-    return any(key in payload for key in ("status", "body", "answer", "citedRefIds"))
+    return any(
+        key in payload
+        for key in ("status", "answerMode", "body", "answer", "citedRefIds")
+    )
 
 
 def _response_content(response: Any) -> str:

@@ -204,6 +204,7 @@ def test_read_only_inquiry_sidecar_acceptance_opt_in_llm_no_mutation(
     llm.content = json.dumps(
         {
             "status": "answered",
+            "answerMode": "evidence_based",
             "body": (
                 "LLM rendered a read-only answer from cited safe evidence only."
             ),

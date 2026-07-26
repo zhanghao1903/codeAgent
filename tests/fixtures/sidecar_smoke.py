@@ -427,6 +427,7 @@ class _ReadOnlyInquirySmokeLLM:
             json.dumps(
                 {
                     "status": "answered",
+                    "answerMode": "evidence_based",
                     "body": (
                         "LLM rendered a read-only answer from cited safe evidence only."
                     ),

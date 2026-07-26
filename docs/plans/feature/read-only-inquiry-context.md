@@ -2,7 +2,7 @@
 
 > Status: accepted for Product 1.1 local runtime
 >
-> Last Updated: 2026-06-14
+> Last Updated: 2026-07-25
 >
 > Owner: Product / Context / Backend / Frontend
 >
@@ -116,7 +116,9 @@ formal sidecar no-mutation acceptance covered.
 
 - Add deterministic status answer path.
 - Implemented: read-only LLM/profile provider seam over safe answer/evidence
-  context, with citation validation and no-tool calls.
+  context, with explicit `self_contained` versus `evidence_based` answer modes,
+  conditional citation validation, and no-tool calls. Self-contained answers
+  may omit citations; evidence-based answers must cite supplied evidence.
 - Implemented: default sidecar runtime wiring through
   `enable_read_only_inquiry_llm`; use
   `PLATO_ENABLE_READ_ONLY_INQUIRY_LLM=0` or
