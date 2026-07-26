@@ -29,6 +29,7 @@ def test_guarded_llm_provider_accepts_cited_json_answer() -> None:
         json.dumps(
             {
                 "status": "answered",
+                "answerMode": "evidence_based",
                 "title": "Evidence answer",
                 "body": "The selected task is done based on the cited status.",
                 "confidence": "high",
@@ -57,11 +58,77 @@ def test_guarded_llm_provider_accepts_cited_json_answer() -> None:
     assert "[redacted-path]" in prompt
 
 
+def test_guarded_llm_provider_accepts_self_contained_answer_without_citations() -> None:
+    llm = _LLM(
+        json.dumps(
+            {
+                "status": "answered",
+                "answerMode": "self_contained",
+                "body": "4",
+                "confidence": "high",
+                "citedRefIds": [],
+            }
+        )
+    )
+    provider = GuardedLLMReadOnlyInquiryAnswerProvider(llm)
+
+    for evidence_refs in ((), (_task_evidence(),)):
+        result = provider.answer(
+            request=_request(question="What is 2 + 2?"),
+            baseline_answer=_baseline(),
+            evidence_refs=evidence_refs,
+        )
+
+        assert result.status == "answered"
+        assert result.answer is not None
+        assert result.answer.body == "4"
+        assert result.answer.confidence == "high"
+        assert result.evidence_refs == ()
+        assert result.warnings == ()
+    assert len(llm.calls) == 2
+    system_prompt = llm.calls[0]["messages"][0]["content"]
+    prompt_payload = json.loads(llm.calls[0]["messages"][1]["content"])
+    assert "self_contained" in system_prompt
+    assert "evidence_based" in system_prompt
+    assert prompt_payload["outputRules"]["allowedAnswerModes"] == [
+        "evidence_based",
+        "self_contained",
+    ]
+
+
+def test_guarded_llm_provider_requires_citation_for_evidence_based_answer() -> None:
+    llm = _LLM(
+        json.dumps(
+            {
+                "status": "answered",
+                "answerMode": "evidence_based",
+                "body": "The selected task is done.",
+                "confidence": "high",
+                "citedRefIds": [],
+            }
+        )
+    )
+    provider = GuardedLLMReadOnlyInquiryAnswerProvider(llm)
+
+    result = provider.answer(
+        request=_request(question="Is the selected task complete?"),
+        baseline_answer=_baseline(),
+        evidence_refs=(_task_evidence(),),
+    )
+
+    assert result.status == "unsupported"
+    assert result.answer is None
+    assert result.evidence_refs == (_task_evidence(),)
+    assert result.warnings[-1].code == "inquiry.citation_required"
+    assert "cite at least one supplied evidence ref" in result.warnings[-1].message
+
+
 def test_guarded_llm_provider_injects_local_time_context() -> None:
     llm = _LLM(
         json.dumps(
             {
                 "status": "answered",
+                "answerMode": "evidence_based",
                 "body": "The resolved date is 2026-06-21.",
                 "confidence": "high",
                 "citedRefIds": ["task:task-1:status"],
@@ -110,6 +177,7 @@ def test_guarded_llm_provider_extracts_embedded_structured_answer() -> None:
         + json.dumps(
             {
                 "status": "answered",
+                "answerMode": "evidence_based",
                 "body": body,
                 "confidence": "medium",
                 "citedRefIds": ["task:task-1:status"],
@@ -137,6 +205,7 @@ def test_guarded_llm_provider_falls_back_when_citation_is_unknown() -> None:
         json.dumps(
             {
                 "status": "answered",
+                "answerMode": "evidence_based",
                 "body": "Unsupported answer.",
                 "confidence": "medium",
                 "citedRefIds": ["unknown-ref"],
@@ -164,6 +233,7 @@ def test_guarded_llm_provider_ignores_mutating_output() -> None:
         json.dumps(
             {
                 "status": "answered",
+                "answerMode": "evidence_based",
                 "body": "I will run a shell command to inspect the workspace.",
                 "confidence": "high",
                 "citedRefIds": ["task:task-1:status"],
@@ -220,6 +290,7 @@ def test_guarded_llm_provider_uses_web_search_after_unsupported_answer() -> None
             json.dumps(
                 {
                     "status": "answered",
+                    "answerMode": "evidence_based",
                     "title": "World Cup fixtures",
                     "body": "Tomorrow's fixture list is available from FIFA.",
                     "confidence": "medium",
@@ -378,6 +449,7 @@ def test_guarded_llm_provider_writes_split_agent_logs(tmp_path: Path) -> None:
         json.dumps(
             {
                 "status": "answered",
+                "answerMode": "evidence_based",
                 "title": "Evidence answer",
                 "body": "The task is complete.",
                 "confidence": "high",

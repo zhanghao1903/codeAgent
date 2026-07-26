@@ -608,6 +608,7 @@ export type ReadOnlyInquiryWarningCode =
   | "inquiry.context_truncated"
   | "inquiry.evidence_hidden"
   | "inquiry.provider_unavailable"
+  | "inquiry.citation_required"
   | "inquiry.unsupported_question"
   | "inquiry.no_mutation_boundary";
 

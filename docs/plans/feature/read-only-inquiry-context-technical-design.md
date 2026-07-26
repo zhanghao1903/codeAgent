@@ -2,7 +2,7 @@
 
 > Status: accepted for Product 1.1 local runtime
 >
-> Last Updated: 2026-06-14
+> Last Updated: 2026-07-25
 >
 > Owner: Product / Context / Backend UI Gateway / Frontend
 >
@@ -518,6 +518,7 @@ type ReadOnlyInquiryWarning = {
     | "inquiry.context_truncated"
     | "inquiry.evidence_hidden"
     | "inquiry.provider_unavailable"
+    | "inquiry.citation_required"
     | "inquiry.unsupported_question"
     | "inquiry.no_mutation_boundary";
   message: string;
@@ -660,8 +661,9 @@ First accepted options:
 1. deterministic answer for simple status questions;
 2. LLM answer through a read-only profile over bounded context.
 
-The provider output is answer text plus cited evidence refs. It must not return
-commands, tool calls, or hidden state changes.
+The provider output is answer text plus an explicit answer mode and any required
+cited evidence refs. It must not return commands, tool calls, or hidden state
+changes.
 
 If the provider is unavailable or the context is insufficient, the result
 should be `needs_clarification` or `unsupported`, not a fabricated answer.
@@ -678,8 +680,8 @@ before it is enabled:
 - any requested action, command, file edit, Plan edit, or TaskBus operation in
   provider output is ignored and converted to a `rejected` or
   `needs_clarification` result;
-- no streaming partial answer may be shown as final until cited evidence refs
-  are attached.
+- no streaming partial answer may be shown as final until the output contract
+  is validated and any required cited evidence refs are attached.
 
 The answer provider should prefer this failure order:
 
@@ -722,6 +724,7 @@ Provider output:
 ```ts
 type InquiryAnswerProviderOutput = {
   status: "answered" | "needs_clarification" | "unsupported" | "rejected";
+  answerMode?: "self_contained" | "evidence_based" | null;
   body?: string | null;
   confidence?: "high" | "medium" | "low" | null;
   citedRefIds: string[];
@@ -738,8 +741,20 @@ Rules:
   Plan/TaskNode, ASK, confirmation, web, or MCP tool access.
 - The provider cannot introduce new evidence. `citedRefIds` must be a subset of
   the supplied `evidenceRefs`.
-- `answered` requires at least one cited evidence ref unless the deterministic
-  fallback has already created a selected Session/Plan/Task status evidence ref.
+- Every structured JSON `answered` output must explicitly declare `answerMode`;
+  the application does not infer this mode from its answer text.
+- `self_contained` is allowed only when the answer is derived from the question
+  plus stable general knowledge or reasoning. It must not rely on supplied
+  Plato, workspace, time-sensitive, or web evidence, and `citedRefIds` must be
+  empty.
+- `evidence_based` is required whenever the answer relies on supplied Plato,
+  workspace, time-sensitive, or web evidence. It requires at least one valid
+  `citedRefIds` entry.
+- An `evidence_based` answer without a valid citation is converted to
+  `unsupported` with `inquiry.citation_required`; no answer body is displayed.
+- A legacy plain-text response is accepted only after bounded web evidence has
+  already been supplied. That compatibility path is always normalized as
+  evidence-based and attaches only the supplied visible evidence refs.
 - Output is parsed and validated before display. Invalid JSON, unknown statuses,
   unknown cited refs, action requests, file-edit proposals, command text, or
   hidden-context references are discarded and converted to deterministic

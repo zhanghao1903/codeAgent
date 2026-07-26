@@ -123,6 +123,7 @@ def test_main_page_sidecar_uses_guarded_llm_inquiry_provider_by_default(
         llm.final_answer = json.dumps(
             {
                 "status": "answered",
+                "answerMode": "evidence_based",
                 "body": "The LLM provider rendered this read-only answer.",
                 "confidence": "high",
                 "citedRefIds": [f"session:{session_id}:status"],
