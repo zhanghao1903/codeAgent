@@ -1,6 +1,6 @@
 # Standalone LLM Provider Package Technical Design
 
-> Status: F2 design accepted for implementation planning
+> Status: F2 design accepted; release decisions confirmed for F4 implementation
 >
 > Branch: `codex/llm-provider-package`
 >
@@ -28,16 +28,16 @@ and a public package version has been published. Taskweavn then consumes a
 bounded distribution requirement and an exact lock entry. It never imports a
 repository-relative checkout or keeps a second provider implementation.
 
-The distribution name, import name, and license remain explicit pre-release
-decisions. This design uses `<distribution-name>` and `<import-name>` as
-placeholders; they are not proposed public names and must be replaced before
-the external package source layout or public API is frozen.
+The user confirmed the distribution name `llm-provider-adapter`, import package
+`llm_provider_adapter`, MIT license, and first version `0.1.0` on 2026-08-09.
+The user also explicitly authorized TestPyPI validation and publication of the
+same verified artifacts to public PyPI after that validation succeeds.
 
 ```mermaid
 flowchart LR
     Settings["Taskweavn Settings and secret store"] --> Resolve["Agent/provider resolution"]
     Resolve --> Facade["taskweavn.llm compatibility facade"]
-    Facade --> Core["<import-name> chat contracts and retry"]
+    Facade --> Core["llm_provider_adapter chat contracts and retry"]
     Core --> Provider["Selected provider adapter"]
     Provider --> SDK["Optional provider SDK"]
     Core --> Observer["Safe telemetry observer"]
@@ -132,7 +132,7 @@ or response parsing after cutover.
 
 ## 4. Public Contract Design
 
-Names below describe responsibilities; the final import namespace is deferred.
+Public contracts below are exported from `llm_provider_adapter`.
 
 ### 4.1 Request models
 
@@ -261,7 +261,7 @@ llm-provider-adapter/
   README.md
   LICENSE
   CHANGELOG.md
-  src/<import-name>/
+  src/llm_provider_adapter/
     __init__.py
     contracts.py
     errors.py
@@ -332,10 +332,9 @@ its current implementation. No Taskweavn cutover occurs from a local checkout.
 
 ### 9.2 Published dependency cutover
 
-After package release proof, Taskweavn declares a bounded compatible range,
-for example `<distribution-name>>=0.y.0,<0.(y+1).0`, and `uv.lock` records the
-exact registry artifact and hashes. The concrete range is set from the actual
-published version, not copied from this example.
+After package release proof, Taskweavn declares
+`llm-provider-adapter>=0.1.0,<0.2.0`, and `uv.lock` records the exact registry
+artifact and hashes.
 
 ### 9.3 Compatibility facade
 
@@ -427,9 +426,9 @@ consumer proof.
 | Requirements handoff | confirmed document/commit/hash accepted by lifecycle | satisfied |
 | Source repository | public empty target repository and maintainer permission | satisfied |
 | F2 boundary | ownership, API, errors, telemetry, migration, rollback, proof | satisfied by this design |
-| Public names | explicit distribution and import name | deferred; blocks source/API freeze |
-| License | explicit license selection and committed file | deferred; blocks public release |
-| Publication | explicit user authorization for TestPyPI/PyPI mutation | not authorized |
+| Public names | `llm-provider-adapter` / `llm_provider_adapter` | confirmed 2026-08-09 |
+| License | MIT | confirmed 2026-08-09; file pending implementation |
+| Publication | TestPyPI validation, then same artifacts to PyPI | explicitly authorized 2026-08-09 |
 | Taskweavn cutover | released artifact, clean-env proof, bounded constraint and exact lock | not yet satisfied |
 | Merge/release closure | independently reviewed exact heads and authoritative merge/release facts | not yet satisfied |
 
@@ -446,7 +445,5 @@ consumer proof.
 
 ## 15. Design Acceptance
 
-F2 is complete when this document is committed and pushed on the confirmed
-feature branch. Implementation remains prohibited until F3 names coherent
-cross-repository slices and the public-name gate is resolved before any source
-layout or public import is created.
+F2 is complete and its release decisions are resolved. F4 may initialize the
+authoritative external repository and create the confirmed public namespace.

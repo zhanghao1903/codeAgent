@@ -1,6 +1,6 @@
 # Standalone LLM Provider Package Implementation Plan
 
-> Status: F3 implementation plan ready; execution blocked at the public-name gate
+> Status: F3 implementation plan accepted; F4 implementation authorized
 >
 > Branch: `codex/llm-provider-package`
 >
@@ -27,10 +27,9 @@ dependency points at a path, editable checkout, Git URL, or unpublished wheel.
 Every slice has an independent rollback point and must leave the preceding
 verified state usable.
 
-The plan uses `<distribution-name>` and `<import-name>` until the user resolves
-the deferred naming decision. Files containing those placeholders are planning
-artifacts only; production package source cannot be created with placeholder
-names.
+The user confirmed `llm-provider-adapter`, `llm_provider_adapter`, MIT, and
+`0.1.0` on 2026-08-09. TestPyPI validation and subsequent publication of the
+same verified artifacts to public PyPI are explicitly authorized.
 
 ## 2. Preconditions and Hard Gates
 
@@ -72,23 +71,16 @@ delete branches by inference.
 - first release line is public PyPI 0.x;
 - five-provider scope and synchronous chat boundary are fixed.
 
-### Required decisions
+### Confirmed decisions
 
-1. PyPI distribution name.
-2. Python import package name.
-3. Open-source license.
-4. Authorization to publish a release candidate to TestPyPI and, only after
-   proof, publish the exact reviewed artifact to public PyPI.
-5. Merge authorization remains separate for the external and Taskweavn PRs.
-
-### Recommended defaults
-
-- distribution: `llm-provider-adapter`, subject to registry availability;
-- import namespace: `llm_provider_adapter`;
-- license: Apache-2.0 for an independently reusable integration library;
-- first version: `0.1.0`, with compatible Taskweavn range `>=0.1.0,<0.2.0`.
-
-These are recommendations, not accepted decisions.
+1. PyPI distribution name: `llm-provider-adapter`.
+2. Python import package name: `llm_provider_adapter`.
+3. Open-source license: MIT.
+4. First version: `0.1.0`, with compatible Taskweavn range
+   `>=0.1.0,<0.2.0`.
+5. TestPyPI validation and public PyPI publication of the same verified
+   artifacts are authorized.
+6. Merge authorization remains separate for the external and Taskweavn PRs.
 
 ### Exit criteria
 
@@ -111,7 +103,7 @@ CHANGELOG.md
 .python-version
 .github/workflows/ci.yml
 .github/workflows/publish.yml
-src/<import-name>/__init__.py
+src/llm_provider_adapter/__init__.py
 tests/test_import.py
 ```
 
@@ -146,12 +138,12 @@ Close the unmerged external PR/branch. Taskweavn remains unchanged.
 ### External files
 
 ```text
-src/<import-name>/contracts.py
-src/<import-name>/errors.py
-src/<import-name>/telemetry.py
-src/<import-name>/retry.py
-src/<import-name>/catalog.py
-src/<import-name>/factory.py
+src/llm_provider_adapter/contracts.py
+src/llm_provider_adapter/errors.py
+src/llm_provider_adapter/telemetry.py
+src/llm_provider_adapter/retry.py
+src/llm_provider_adapter/catalog.py
+src/llm_provider_adapter/factory.py
 tests/test_contracts.py
 tests/test_errors.py
 tests/test_telemetry.py
@@ -193,14 +185,14 @@ Revert S2 without changing the build scaffold or Taskweavn.
 ### External files
 
 ```text
-src/<import-name>/providers/__init__.py
-src/<import-name>/providers/_openai_compat.py
-src/<import-name>/providers/_anthropic_compat.py
-src/<import-name>/providers/openai.py
-src/<import-name>/providers/claude.py
-src/<import-name>/providers/deepseek.py
-src/<import-name>/providers/openrouter.py
-src/<import-name>/providers/litellm.py
+src/llm_provider_adapter/providers/__init__.py
+src/llm_provider_adapter/providers/_openai_compat.py
+src/llm_provider_adapter/providers/_anthropic_compat.py
+src/llm_provider_adapter/providers/openai.py
+src/llm_provider_adapter/providers/claude.py
+src/llm_provider_adapter/providers/deepseek.py
+src/llm_provider_adapter/providers/openrouter.py
+src/llm_provider_adapter/providers/litellm.py
 tests/providers/test_openai.py
 tests/providers/test_claude.py
 tests/providers/test_deepseek.py
@@ -359,7 +351,7 @@ CHANGELOG.md
 
 ### Changes
 
-- declare `<distribution-name>>=0.1.0,<0.2.0` or the actual compatible range,
+- declare `llm-provider-adapter>=0.1.0,<0.2.0`,
   and lock the exact public registry artifact/hashes;
 - remove direct provider SDK dependencies from Taskweavn when no other feature
   needs them; provider extras move onto the package requirement;
@@ -494,6 +486,5 @@ The feature is complete only when:
 7. authorized merge/release facts and rollback coordinates are recorded in the
    lifecycle trace.
 
-Until S0 is resolved, F4 implementation is blocked specifically at the public
-namespace and license boundary; F2/F3 documentation remains valid and does not
-claim implementation or publication.
+S0 is resolved. F4 starts with authoritative external repository initialization
+and does not claim publication until the authorized artifact checks succeed.

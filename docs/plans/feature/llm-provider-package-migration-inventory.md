@@ -1,6 +1,6 @@
 # Standalone LLM Provider Package Migration Inventory
 
-> Status: F4 pre-implementation evidence; public namespace decision pending
+> Status: F4 pre-implementation evidence; public namespace confirmed
 >
 > Captured At: 2026-08-09
 >
@@ -19,8 +19,8 @@ Taskweavn implementation and the future external package. It prevents a broad
 directory copy from being mistaken for a valid extraction and gives the final
 duplicate-source audit an explicit expected result.
 
-It records current facts only. `<import-name>` remains a placeholder until the
-deferred public namespace decision is confirmed.
+It records current facts only. The public import namespace is confirmed as
+`llm_provider_adapter`.
 
 ## 2. Verified Baseline
 
@@ -66,7 +66,7 @@ boundary tests must pass against the installed registry artifact.
 | Current Taskweavn module | Disposition | Required final form |
 |---|---|---|
 | `llm/contracts.py` | split | pure re-exports for chat types; OpenHands-only aliases remain Taskweavn-owned |
-| `llm/errors.py` | migrate | pure re-exports from `<import-name>.errors` |
+| `llm/errors.py` | migrate | pure re-exports from `llm_provider_adapter.errors` |
 | `llm/retry.py` | migrate | pure re-export of package base/retry types |
 | `llm/provider_catalog.py` | migrate | pure re-exports; no duplicate URL/catalog logic |
 | `llm/providers/_openai_compat.py` | migrate/delete | no Taskweavn parser remains |
@@ -186,7 +186,7 @@ domain models.
 Production callers currently import the LLM layer from audit, CLI, core loop,
 interaction risk, main-page helpers, read-only inquiry, runtime input routing,
 Settings, collaborator execution, and usage recording. The migration should
-not rewrite all callers directly to `<import-name>` during the compatibility
+not rewrite all callers directly to `llm_provider_adapter` during the compatibility
 window. They keep importing `taskweavn.llm` so Taskweavn remains the product
 assembly boundary.
 
@@ -233,13 +233,12 @@ namespace. Any unrelated SDK consumer must be enumerated rather than silently
 ignored.
 
 The dependency audit also rejects `path`, `editable`, `git`, local wheel, or
-repository-relative sources for `<distribution-name>`.
+repository-relative sources for `llm-provider-adapter`.
 
 ## 9. Evidence Still Missing
 
 This inventory does not prove implementation. The following remain missing:
 
-- confirmed distribution/import names and license;
 - initialized external package source and CI;
 - external contract/provider/safety tests;
 - wheel/sdist and isolated extra installs;
@@ -248,5 +247,5 @@ This inventory does not prove implementation. The following remain missing:
 - removal of provider implementation from Taskweavn;
 - dual-repository PR review, merge, and final traceability.
 
-Until the public-name gate is resolved, this manifest is the furthest safe F4
-prework that does not invent a namespace or publish an unlicensed package.
+The public-name and license gates are resolved; the manifest now governs F4
+external package implementation and the later Taskweavn cutover.
