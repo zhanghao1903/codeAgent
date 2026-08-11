@@ -55,7 +55,6 @@ from taskweavn.llm.client import (
     parse_tool_arguments,
     tool_schema_from_action,
 )
-from taskweavn.llm.errors import LLMProviderError
 from taskweavn.llm.logging import log_agent_llm_input, log_agent_llm_output
 from taskweavn.memory.thought_store import (
     NullThoughtStore,
@@ -412,7 +411,13 @@ class AgentLoop:
                     )
                 )
 
-            messages.append(response.raw_assistant_message)
+            # Package responses expose recursively frozen mappings.  The loop
+            # owns a mutable, JSON-serializable transcript, so cross the public
+            # serialization boundary before retaining the assistant message.
+            raw_assistant_message = response.to_dict()["raw_assistant_message"]
+            if not isinstance(raw_assistant_message, dict):
+                raise TypeError("raw_assistant_message must serialize to an object")
+            messages.append(raw_assistant_message)
             interrupted = self._check_interrupt("after_llm_response", step)
             if interrupted is not None:
                 return interrupted
@@ -1067,8 +1072,5 @@ def _is_llm_timeout_error(exc: BaseException) -> bool:
         message = str(current).lower()
         if "timeout" in error_name or "timeout" in message or "timed out" in message:
             return True
-        if isinstance(current, LLMProviderError):
-            current = current.original_error
-            continue
         current = current.__cause__ if isinstance(current.__cause__, BaseException) else None
     return False

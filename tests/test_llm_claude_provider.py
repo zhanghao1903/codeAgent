@@ -103,7 +103,7 @@ def test_claude_provider_converts_tool_round_trip_and_usage() -> None:
     kwargs = client.messages.create.call_args.kwargs
     assert kwargs["system"] == "system one\n\nsystem two"
     assert kwargs["max_tokens"] == DEFAULT_CLAUDE_MAX_TOKENS
-    assert kwargs["tools"][0]["input_schema"]["required"] == ["path"]
+    assert kwargs["tools"][0]["input_schema"]["required"] == ("path",)
     assert kwargs["messages"][1]["content"][0] == {
         "type": "tool_use",
         "id": "call-1",

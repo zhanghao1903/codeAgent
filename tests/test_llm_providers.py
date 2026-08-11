@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -230,9 +230,9 @@ def test_deepseek_reasoner_strips_reasoning_content_from_input() -> None:
     assert "reasoning_content" not in client.kwargs["messages"][0]
 
 
-@patch("taskweavn.llm.providers.openrouter.litellm")
-def test_openrouter_provider_routing_is_sent(mock_litellm: MagicMock) -> None:
-    mock_litellm.completion.return_value = _fake_response(content="ok")
+def test_openrouter_provider_routing_is_sent() -> None:
+    client = MagicMock()
+    client.completion.return_value = _fake_response(content="ok")
     provider = OpenRouterProvider(
         api_key="sk",
         provider_routing=ProviderRoutingConfig(
@@ -241,14 +241,16 @@ def test_openrouter_provider_routing_is_sent(mock_litellm: MagicMock) -> None:
             allow_fallbacks=False,
             require_parameters=True,
         ),
+        client=client,
     )
     result = provider.chat(ChatRequest(model="deepseek/deepseek-r1", messages=[]))
     assert result.content == "ok"
-    mock_litellm.completion.assert_called_once_with(
+    client.completion.assert_called_once_with(
         model="deepseek/deepseek-r1",
         api_key="sk",
         messages=[],
         tools=None,
+        num_retries=0,
         extra_body={
             "provider": {
                 "allow_fallbacks": False,
@@ -260,33 +262,35 @@ def test_openrouter_provider_routing_is_sent(mock_litellm: MagicMock) -> None:
     )
 
 
-@patch("taskweavn.llm.providers.litellm.litellm")
-def test_litellm_sends_request_timeout(mock_litellm: MagicMock) -> None:
-    mock_litellm.completion.return_value = _fake_response(content="ok")
-    provider = LiteLLMProvider(api_key="sk")
+def test_litellm_sends_request_timeout() -> None:
+    client = MagicMock()
+    client.completion.return_value = _fake_response(content="ok")
+    provider = LiteLLMProvider(api_key="sk", client=client)
 
     provider.chat(ChatRequest(model="m", messages=[], timeout_seconds=8.0))
 
-    mock_litellm.completion.assert_called_once_with(
+    client.completion.assert_called_once_with(
         model="m",
         api_key="sk",
         messages=[],
         tools=None,
+        num_retries=0,
         timeout=8.0,
     )
 
 
-@patch("taskweavn.llm.providers.openrouter.litellm")
-def test_openrouter_sends_request_timeout(mock_litellm: MagicMock) -> None:
-    mock_litellm.completion.return_value = _fake_response(content="ok")
-    provider = OpenRouterProvider(api_key="sk")
+def test_openrouter_sends_request_timeout() -> None:
+    client = MagicMock()
+    client.completion.return_value = _fake_response(content="ok")
+    provider = OpenRouterProvider(api_key="sk", client=client)
 
     provider.chat(ChatRequest(model="openrouter/model", messages=[], timeout_seconds=9.0))
 
-    mock_litellm.completion.assert_called_once_with(
+    client.completion.assert_called_once_with(
         model="openrouter/model",
         api_key="sk",
         messages=[],
         tools=None,
+        num_retries=0,
         timeout=9.0,
     )

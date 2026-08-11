@@ -25,6 +25,7 @@ from taskweavn.llm.contracts import (
     ThinkingConfig,
     ToolCall,
 )
+from taskweavn.llm.telemetry import DEFAULT_PROVIDER_TELEMETRY_OBSERVER
 
 
 class _LazyOpenHandsLLM:
@@ -71,14 +72,8 @@ class LLMClient:
             raise ValueError("request_timeout_seconds must be positive or None")
         self._model = model
         self._api_key = api_key
-        if provider is None:
-            from taskweavn.llm.providers.litellm import LiteLLMProvider
-
-            provider = LiteLLMProvider(
-                api_key=api_key,
-                retry_policy=retry_policy,
-            )
         self._provider = provider
+        self._retry_policy = retry_policy
         self._thinking = thinking
         self._provider_routing = provider_routing
         self._request_timeout_seconds = request_timeout_seconds
@@ -156,7 +151,17 @@ class LLMClient:
             provider_routing=provider_routing or self._provider_routing,
             metadata=metadata or {},
         )
-        return self._provider.chat(request)
+        provider = self._provider
+        if provider is None:
+            from taskweavn.llm.providers.litellm import LiteLLMProvider
+
+            provider = LiteLLMProvider(
+                api_key=self._api_key,
+                retry_policy=self._retry_policy,
+                observer=DEFAULT_PROVIDER_TELEMETRY_OBSERVER,
+            )
+            self._provider = provider
+        return provider.chat(request)
 
 class LazyLLMClient:
     """Delay provider setup until the first model request.

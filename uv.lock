@@ -1337,6 +1337,27 @@ wheels = [
 ]
 
 [[package]]
+name = "llm-provider-adapter"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pydantic", version = "2.12.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.15'" },
+    { name = "pydantic", version = "2.13.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.15'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/28/65/1ad1a33d634640e8e5d1c7bad5534b7b54864e88279f320c52bc925e468d/llm_provider_adapter-0.1.0.tar.gz", hash = "sha256:d84fc296a239417aa46616f385b6eab8ec2e53c1f067453ce2a591a036c1aa63", size = 201365, upload-time = "2026-08-11T16:10:37.704Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/22/a4/426603f9016518690b429c25bedcf20dfb17ca86f2114560813acbb37201/llm_provider_adapter-0.1.0-py3-none-any.whl", hash = "sha256:43a0526133087d6d06897cd781a5732e337345b55b11b79a16c3bf5f4531d868", size = 29051, upload-time = "2026-08-11T16:10:36.538Z" },
+]
+
+[package.optional-dependencies]
+all = [
+    { name = "anthropic" },
+    { name = "litellm", version = "1.83.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.15'" },
+    { name = "litellm", version = "1.83.14", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.15'" },
+    { name = "openai" },
+]
+
+[[package]]
 name = "lmnr"
 version = "0.7.50"
 source = { registry = "https://pypi.org/simple" }
@@ -3088,11 +3109,10 @@ name = "taskweavn"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "anthropic" },
     { name = "app-control-protocol" },
     { name = "computer-use-macos", extra = ["accessibility"], marker = "sys_platform == 'darwin'" },
     { name = "docker" },
-    { name = "openai" },
+    { name = "llm-provider-adapter", extra = ["all"] },
     { name = "openhands-sdk" },
     { name = "pydantic", version = "2.12.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.15'" },
     { name = "pydantic", version = "2.13.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.15'" },
@@ -3115,11 +3135,10 @@ packaging = [
 
 [package.metadata]
 requires-dist = [
-    { name = "anthropic", specifier = ">=0.119.0" },
     { name = "app-control-protocol", specifier = ">=0.3.0,<0.4.0" },
     { name = "computer-use-macos", extras = ["accessibility"], marker = "sys_platform == 'darwin'", specifier = ">=0.3.0,<0.4.0" },
     { name = "docker", specifier = ">=7.0.0" },
-    { name = "openai", specifier = ">=2.0.0" },
+    { name = "llm-provider-adapter", extras = ["all"], specifier = ">=0.1.0,<0.2.0" },
     { name = "openhands-sdk", specifier = ">=1.19.0" },
     { name = "pydantic", specifier = ">=2.10" },
     { name = "pyyaml", specifier = ">=6.0" },

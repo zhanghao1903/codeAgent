@@ -16,6 +16,7 @@ alongside the release record.
 
 | Release | Status | Summary |
 |---|---:|---|
+| [Standalone LLM Provider Package](standalone-llm-provider-package.md) | external 0.1.0 released / consumer verification | Published the reviewed `llm-provider-adapter==0.1.0` artifacts through TestPyPI and PyPI, then cut Taskweavn over to a bounded registry dependency and thin compatibility facade. |
 | [Plato Product 1.1 Formal Release Notes](product-1-1-formal-release-notes.md) | release candidate verified | Formal public `v1.1` notes: Product 1.1 vs Product 1.0, added features, changed behavior, artifact metadata, validation, and safe public claims. |
 | [Product 1.1 Beta External Release Notes](product-1-1-beta-external-release-notes.md) | ready | Public-facing source notes for external Product 1.1 beta publication: shipped behavior, verified scope, artifact metadata, known limitations, safe claims, and publishing checklist. |
 | [Product 1.1 Runtime Input Router Release Evidence](product-1-1-runtime-input-router-release-evidence.md) | done | Product 1.1 beta P0 evidence closure: Runtime Input Router, Contract Revision Command Skills, durable Conversation / Activity, Router Audit / Diagnostics, packaged app, and mounted `1.1-beta` installer smoke. |
