@@ -169,8 +169,12 @@ def test_collaborator_sidecar_acceptance_forced_read_search_finish(
         tool["function"]["name"]
         for tool in (provider.requests[0].tools or [])
     }
-    second_messages = json.dumps(provider.requests[1].messages, ensure_ascii=False)
-    third_messages = json.dumps(provider.requests[2].messages, ensure_ascii=False)
+    second_messages = json.dumps(
+        provider.requests[1].model_dump(mode="json")["messages"], ensure_ascii=False
+    )
+    third_messages = json.dumps(
+        provider.requests[2].model_dump(mode="json")["messages"], ensure_ascii=False
+    )
 
     assert command_status == 200
     assert command["ok"] is True, command_text
@@ -240,7 +244,9 @@ def test_collaborator_sidecar_acceptance_forced_read_ask(
         tool["function"]["name"]
         for tool in (provider.requests[0].tools or [])
     }
-    second_messages = json.dumps(provider.requests[1].messages, ensure_ascii=False)
+    second_messages = json.dumps(
+        provider.requests[1].model_dump(mode="json")["messages"], ensure_ascii=False
+    )
 
     assert command_status == 200
     assert command["ok"] is True, command_text

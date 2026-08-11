@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Any, Protocol, runtime_checkable
 from uuid import uuid4
 
@@ -81,7 +81,10 @@ class CollaboratorAuthoringProfileRunner:
                     loop_id=loop_id,
                     step=context_steps_used,
                 )
-                messages.append(response.raw_assistant_message)
+                raw_assistant_message = response.to_dict()["raw_assistant_message"]
+                if not isinstance(raw_assistant_message, dict):
+                    raise TypeError("raw_assistant_message must serialize to an object")
+                messages.append(raw_assistant_message)
                 if not response.tool_calls:
                     terminal_action = self._profile.finish_action(
                         proposal_kind=request.proposal_kind,
@@ -166,7 +169,7 @@ class CollaboratorAuthoringProfileRunner:
         )
         return response
 
-    def _single_terminal_call(self, tool_calls: list[ToolCall]) -> ToolCall | None:
+    def _single_terminal_call(self, tool_calls: Sequence[ToolCall]) -> ToolCall | None:
         terminal_tool_names = set(self._profile.terminal_tool_names)
         terminal_calls = [
             tool_call

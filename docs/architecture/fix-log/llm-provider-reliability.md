@@ -439,3 +439,75 @@ Results:
 - Credentialed DeepSeek/OpenRouter network tests: not run; the repository does
   not provide test credentials or a live-provider acceptance fixture for this
   boundary.
+
+## 2026-08-12 External Package Cutover Calibration
+
+### Scope
+
+The active architecture document was recalibrated after the reusable provider
+boundary moved to the separately released `llm-provider-adapter==0.1.0` package.
+The preserved original remains unchanged; this batch replaces the July
+repo-owned implementation facts in the active document only.
+
+### Evidence
+
+1. Public PyPI wheel SHA-256:
+   `43a0526133087d6d06897cd781a5732e337345b55b11b79a16c3bf5f4531d868`.
+2. Public PyPI sdist SHA-256:
+   `d84fc296a239417aa46616f385b6eab8ec2e53c1f067453ce2a591a036c1aa63`.
+3. `uv.lock` resolves version `0.1.0` from `https://pypi.org/simple` with those
+   exact hashes and no path/editable/Git source.
+4. `pyproject.toml` requests
+   `llm-provider-adapter[all]>=0.1.0,<0.2.0` and no longer directly declares
+   OpenAI or Anthropic SDKs.
+5. Taskweavn contract/error/retry/provider paths re-export the exact external
+   symbol objects; provider compatibility/conversion sources were deleted.
+6. `TaskweavnTelemetryObserver` maps only package allow-list fields into the
+   stable `llm` event taxonomy.
+7. AgentLoop, Collaborator, and output logging call the package serialization
+   API before sending recursively frozen response mappings into mutable JSON
+   transcript/storage boundaries.
+8. `tests/test_llm_package_boundary.py` makes the dependency source, hashes,
+   symbol identity, provider-source deletion, telemetry fields, and chat-only
+   protocol executable invariants.
+
+### Corrected facts
+
+- Provider implementations, response parsers, retry and normalized errors are
+  package-owned rather than Taskweavn-owned.
+- The external protocol has `chat()` only; Taskweavn's OpenHands
+  `complete()`/`count_tokens()` remain a separate compatibility path.
+- Public contract collections are recursively immutable; product persistence
+  uses detached serialization rather than mutating package values.
+- Recognized explicit and SDK-default timeouts are never automatically replayed.
+- Normalized errors retain no raw SDK exception, context, cause, payload, or
+  secret-bearing text.
+- Five providers are now in the supported package set, including first-party
+  OpenAI and Claude adapters.
+- Safe package telemetry and application `llm_io` are distinct disclosure
+  boundaries.
+- Compatibility re-exports are retained for one Taskweavn minor window and are
+  not eligible for removal before `0.3.0` without separate review.
+
+### Validation log
+
+```bash
+uv lock --check
+uv run pytest -q
+uv run ruff check <changed Python scope>
+uv run mypy <changed production and boundary-test scope>
+git diff --check
+```
+
+Results:
+
+- lock check: passed;
+- backend pytest: `1604 passed, 1 skipped`;
+- changed-scope Ruff: passed;
+- changed-scope strict Mypy: passed;
+- duplicate provider source scan: no matches;
+- diff check: passed.
+
+Repository-wide Ruff and Mypy remain non-gating for this calibration because
+they report pre-existing failures in archived sample code and unrelated files;
+the exact failures were unchanged by this LLM cutover scope.

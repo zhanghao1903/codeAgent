@@ -15,9 +15,11 @@ from taskweavn.llm import (
     ChatResponse,
     LazyLLMClient,
     LLMClient,
+    ToolCall,
     parse_tool_arguments,
     tool_schema_from_action,
 )
+from taskweavn.llm.telemetry import DEFAULT_PROVIDER_TELEMETRY_OBSERVER
 from taskweavn.tools.fs import WriteFileAction
 from taskweavn.types import AgentFinishAction
 
@@ -132,6 +134,7 @@ def test_from_env_builds_openai_provider_with_configured_endpoint(
     mock_provider_cls.assert_called_once_with(
         api_key="sk-openai",
         base_url="https://gateway.example.test/v1",
+        observer=DEFAULT_PROVIDER_TELEMETRY_OBSERVER,
     )
     assert client.model == "gpt-test"
 
@@ -155,6 +158,7 @@ def test_from_env_builds_claude_provider_with_configured_endpoint(
     mock_provider_cls.assert_called_once_with(
         api_key="sk-ant-claude",
         base_url="https://gateway.example.test",
+        observer=DEFAULT_PROVIDER_TELEMETRY_OBSERVER,
     )
     assert client.model == "claude-test"
 
@@ -252,58 +256,44 @@ def test_parse_tool_arguments_rejects_non_object() -> None:
         parse_tool_arguments("[1, 2, 3]")
 
 
-def _fake_litellm_response(
-    content: str,
-    tool_calls: list[dict[str, Any]] | None = None,
-) -> Any:
-    msg = MagicMock()
-    msg.content = content
-    if tool_calls:
-        tcs = []
-        for tc in tool_calls:
-            m = MagicMock()
-            m.id = tc["id"]
-            m.function.name = tc["name"]
-            m.function.arguments = tc["arguments"]
-            tcs.append(m)
-        msg.tool_calls = tcs
-    else:
-        msg.tool_calls = None
-    choice = MagicMock()
-    choice.message = msg
-    response = MagicMock()
-    response.choices = [choice]
-    return response
-
-
 @patch("taskweavn.llm.client.LLM")
-@patch("taskweavn.llm.providers.litellm.litellm")
 def test_chat_parses_plain_text_response(
-    mock_litellm: MagicMock,
     mock_llm_cls: MagicMock,  # noqa: ARG001
 ) -> None:
-    mock_litellm.completion.return_value = _fake_litellm_response("hello")
-    client = LLMClient(model="anthropic/claude", api_key="sk")
+    provider = MagicMock()
+    provider.chat.return_value = ChatResponse(
+        content="hello",
+        tool_calls=[],
+        raw_assistant_message={"role": "assistant", "content": "hello"},
+    )
+    client = LLMClient(model="anthropic/claude", api_key="sk", provider=provider)
     result = client.chat(messages=[{"role": "user", "content": "hi"}])
     assert isinstance(result, ChatResponse)
     assert result.content == "hello"
-    assert result.tool_calls == []
+    assert result.tool_calls == ()
     assert result.raw_assistant_message == {"role": "assistant", "content": "hello"}
+    request = provider.chat.call_args.args[0]
+    assert request.messages == ({"role": "user", "content": "hi"},)
+    assert request.timeout_seconds == 180.0
 
 
 @patch("taskweavn.llm.client.LLM")
-@patch("taskweavn.llm.providers.litellm.litellm")
 def test_chat_parses_tool_calls(
-    mock_litellm: MagicMock,
     mock_llm_cls: MagicMock,  # noqa: ARG001
 ) -> None:
-    mock_litellm.completion.return_value = _fake_litellm_response(
+    provider = MagicMock()
+    provider.chat.return_value = ChatResponse(
         content="",
         tool_calls=[
-            {"id": "c1", "name": "write_file", "arguments": '{"path":"a","content":"b"}'},
+            ToolCall(
+                id="c1",
+                name="write_file",
+                arguments='{"path":"a","content":"b"}',
+            ),
         ],
+        raw_assistant_message={"role": "assistant", "tool_calls": [{"id": "c1"}]},
     )
-    client = LLMClient(model="anthropic/claude", api_key="sk")
+    client = LLMClient(model="anthropic/claude", api_key="sk", provider=provider)
     result = client.chat(messages=[], tools=[{"type": "function"}])
 
     assert len(result.tool_calls) == 1
@@ -312,29 +302,22 @@ def test_chat_parses_tool_calls(
     assert tc.name == "write_file"
     assert tc.arguments == '{"path":"a","content":"b"}'
     assert "tool_calls" in result.raw_assistant_message
-    mock_litellm.completion.assert_called_once_with(
-        model="anthropic/claude",
-        api_key="sk",
-        messages=[],
-        tools=[{"type": "function"}],
-        timeout=180.0,
-    )
+    request = provider.chat.call_args.args[0]
+    assert request.tools == ({"type": "function"},)
+    assert request.timeout_seconds == 180.0
 
 
 @patch("taskweavn.llm.client.LLM")
-@patch("taskweavn.llm.providers.litellm.litellm")
 def test_chat_timeout_can_be_overridden_per_call(
-    mock_litellm: MagicMock,
     mock_llm_cls: MagicMock,  # noqa: ARG001
 ) -> None:
-    mock_litellm.completion.return_value = _fake_litellm_response("hello")
-    client = LLMClient(model="anthropic/claude", api_key="sk")
-    client.chat(messages=[], timeout_seconds=30.0)
-
-    mock_litellm.completion.assert_called_once_with(
-        model="anthropic/claude",
-        api_key="sk",
-        messages=[],
-        tools=None,
-        timeout=30.0,
+    provider = MagicMock()
+    provider.chat.return_value = ChatResponse(
+        content="hello",
+        tool_calls=[],
+        raw_assistant_message={"role": "assistant", "content": "hello"},
     )
+    client = LLMClient(model="anthropic/claude", api_key="sk", provider=provider)
+    client.chat(messages=[], timeout_seconds=30.0)
+    request = provider.chat.call_args.args[0]
+    assert request.timeout_seconds == 30.0

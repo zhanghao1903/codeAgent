@@ -202,19 +202,20 @@ def log_agent_llm_output(
 
 
 def _raw_assistant_message_payload(response: ChatResponse) -> dict[str, Any]:
-    raw_message = getattr(
-        response,
+    raw_message = response.to_dict().get(
         "raw_assistant_message",
         {"role": "assistant", "content": response.content},
     )
-    payload = dict(raw_message)
+    if not isinstance(raw_message, dict):
+        return {"role": "assistant", "content_omitted": "invalid_raw_message"}
+    payload = raw_message
     if payload.get("content") == response.content:
         payload.pop("content", None)
         payload["content_omitted"] = "duplicate_of_content"
     return payload
 
 
-def _metadata_str(metadata: dict[str, Any], key: str) -> str | None:
+def _metadata_str(metadata: Mapping[str, Any], key: str) -> str | None:
     value = metadata.get(key)
     return str(value) if value is not None else None
 

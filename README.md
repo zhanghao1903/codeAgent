@@ -35,7 +35,7 @@ cache-aware Context Manager for LLM input assembly.
 |---|---:|---|
 | Agent core | Done | Strongly typed Action/Observation, EventStream, Runtime, ReAct loop, CLI. |
 | Interaction substrate | Done | Session/workspace persistence, MessageStream, MessageBus, risk/autonomy, wait coordination, derived session status. |
-| Reliability and observability | Done / follow-up hardening | LLM provider abstraction, retry, DeepSeek thinking, OpenRouter routing, structured JSONL session logs. |
+| Reliability and observability | Done / follow-up hardening | Public `llm-provider-adapter` 0.1.0 integration for five providers, bounded retry/safe errors, DeepSeek thinking, OpenRouter routing, structured JSONL session logs. |
 | Authoring domain | Done | RawTask, feasibility, DraftTaskTree, Authoring Commands, Collaborator authoring, publish boundary. |
 | Publishing and TaskBus | Done | TaskPublisher, SQLite TaskBus, publish idempotency, claim/running/complete/fail/skip/retry lifecycle. |
 | Runtime input | Product 1.1 beta | One Main Page input routes questions, guidance, ASK / confirmation answers, Plan / TaskNode edits, and execution handoff through the Runtime Input Router. |
@@ -238,7 +238,7 @@ src/taskweavn/
   context/        Context Manager models, stores, source adapters, renderer
   core/           AgentLoop, EventStream, sessions, workspace layout
   interaction/    Risk, autonomy, messages, bus, gate, wait coordination
-  llm/            LLM client and provider implementations
+  llm/            Product LLM assembly and external-provider compatibility facade
   memory/         ThoughtStore side-channel persistence
   observability/  Structured logging and session archives
   runtime/        Runtime protocol and LocalRuntime

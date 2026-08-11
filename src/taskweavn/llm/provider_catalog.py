@@ -1,12 +1,26 @@
-"""Shared metadata and validation for configured LLM providers."""
+"""Taskweavn projection of the external provider catalog.
+
+Labels, credentials, default endpoints, and URL validation are sourced from
+``llm_provider_adapter``.  Only product-owned environment-variable projection
+and display ordering remain here.
+"""
 
 from __future__ import annotations
 
-from typing import Literal
-from urllib.parse import urlsplit
+from llm_provider_adapter.catalog import (
+    DEFAULT_CLAUDE_BASE_URL,
+    DEFAULT_DEEPSEEK_BASE_URL,
+    DEFAULT_OPENAI_BASE_URL,
+    PROVIDER_CATALOG,
+    ProviderName,
+    provider_entry,
+    validate_base_url,
+)
 
-LlmProviderName = Literal["litellm", "deepseek", "openrouter", "openai", "claude"]
+LlmProviderName = ProviderName
 
+# Preserve the existing Taskweavn Settings display order. Provider metadata is
+# still read from the external catalog rather than duplicated here.
 SUPPORTED_LLM_PROVIDERS: tuple[LlmProviderName, ...] = (
     "litellm",
     "deepseek",
@@ -16,28 +30,15 @@ SUPPORTED_LLM_PROVIDERS: tuple[LlmProviderName, ...] = (
 )
 
 PROVIDER_LABELS: dict[str, str] = {
-    "litellm": "LiteLLM",
-    "deepseek": "DeepSeek",
-    "openrouter": "OpenRouter",
-    "openai": "OpenAI",
-    "claude": "Claude",
+    provider: provider_entry(provider).label for provider in SUPPORTED_LLM_PROVIDERS
 }
-
-DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
-DEFAULT_CLAUDE_BASE_URL = "https://api.anthropic.com"
 
 
 def required_api_key_env_vars(provider: str) -> tuple[str, ...]:
     normalized = provider.strip().lower()
-    if normalized == "deepseek":
-        return ("DEEPSEEK_API_KEY", "LLM_API_KEY")
-    if normalized == "openrouter":
-        return ("OPENROUTER_API_KEY", "LLM_API_KEY")
-    if normalized == "openai":
-        return ("OPENAI_API_KEY", "LLM_API_KEY")
-    if normalized == "claude":
-        return ("ANTHROPIC_API_KEY", "LLM_API_KEY")
-    return ("LLM_API_KEY",)
+    if normalized not in PROVIDER_CATALOG:
+        return ("LLM_API_KEY",)
+    return provider_entry(normalized).credential_env_vars
 
 
 def preferred_api_key_env_var(provider: str) -> str:
@@ -55,42 +56,33 @@ def base_url_env_var(provider: str) -> str | None:
 
 def default_base_url(provider: str) -> str | None:
     normalized = provider.strip().lower()
-    if normalized == "openai":
-        return DEFAULT_OPENAI_BASE_URL
-    if normalized == "claude":
-        return DEFAULT_CLAUDE_BASE_URL
-    return None
+    if normalized not in PROVIDER_CATALOG or base_url_env_var(normalized) is None:
+        return None
+    return provider_entry(normalized).default_base_url
 
 
 def validate_provider_base_url(provider: str, value: str | None) -> str | None:
-    """Return a normalized provider endpoint or raise a user-correctable error."""
+    """Validate a Taskweavn-configurable endpoint via the package policy."""
 
     normalized_provider = provider.strip().lower()
+    if normalized_provider not in PROVIDER_CATALOG:
+        return None
     if base_url_env_var(normalized_provider) is None:
         return None
-    normalized = (value or "").strip().rstrip("/")
+    normalized = (value or "").strip()
     if not normalized:
-        label = PROVIDER_LABELS.get(normalized_provider, normalized_provider)
-        raise ValueError(f"base URL is required for the {label} provider")
-
-    parsed = urlsplit(normalized)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise ValueError("base URL must be an absolute HTTP or HTTPS URL")
-    if parsed.username is not None or parsed.password is not None:
-        raise ValueError("base URL must not include credentials")
-    if parsed.query or parsed.fragment:
-        raise ValueError("base URL must not include a query or fragment")
-    try:
-        _ = parsed.port
-    except ValueError as exc:
-        raise ValueError("base URL contains an invalid port") from exc
-    return normalized
+        raise ValueError(
+            f"base URL is required for the {provider_entry(provider).label} provider"
+        )
+    return validate_base_url(normalized)
 
 
 __all__ = [
     "DEFAULT_CLAUDE_BASE_URL",
+    "DEFAULT_DEEPSEEK_BASE_URL",
     "DEFAULT_OPENAI_BASE_URL",
     "LlmProviderName",
+    "PROVIDER_CATALOG",
     "PROVIDER_LABELS",
     "SUPPORTED_LLM_PROVIDERS",
     "base_url_env_var",

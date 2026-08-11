@@ -1,10 +1,10 @@
 # Standalone LLM Provider Package Migration Inventory
 
-> Status: F4 pre-implementation evidence; public namespace confirmed
+> Status: S7 cutover verified; S8 independent review pending
 >
-> Captured At: 2026-08-09
+> Captured At: 2026-08-12
 >
-> Taskweavn Head: `1adaddd`
+> Taskweavn Branch: `codex/llm-provider-package`
 >
 > Requirements: [Standalone LLM Provider Package Requirements](llm-provider-package-requirements.md)
 >
@@ -235,17 +235,45 @@ ignored.
 The dependency audit also rejects `path`, `editable`, `git`, local wheel, or
 repository-relative sources for `llm-provider-adapter`.
 
-## 9. Evidence Still Missing
+## 9. Migration Evidence
 
-This inventory does not prove implementation. The following remain missing:
+Completed external package evidence:
 
-- initialized external package source and CI;
-- external contract/provider/safety tests;
-- wheel/sdist and isolated extra installs;
-- authorized TestPyPI/public PyPI release;
-- Taskweavn registry dependency and exact lock;
-- removal of provider implementation from Taskweavn;
-- dual-repository PR review, merge, and final traceability.
+- public package `llm-provider-adapter==0.1.0`, MIT, Python 3.11+;
+- external package PR #1 merged at `c7b40207a1cbe1216f7669eb1a761d3a921f49a2`;
+- release-controller PR #2 merged at `19e7526086c8306b5823c17fb4d5e5eba60e800d`;
+- GitHub release workflow run `31506383555` completed successfully;
+- TestPyPI registry/download/isolated-extra verification passed before public upload;
+- public PyPI wheel SHA-256
+  `43a0526133087d6d06897cd781a5732e337345b55b11b79a16c3bf5f4531d868`;
+- public PyPI sdist SHA-256
+  `d84fc296a239417aa46616f385b6eab8ec2e53c1f067453ce2a591a036c1aa63`;
+- clean public-index Python 3.12 `[all]` installation constructed all five
+  providers and ran the offline fake successfully.
 
-The public-name and license gates are resolved; the manifest now governs F4
-external package implementation and the later Taskweavn cutover.
+Completed Taskweavn cutover evidence:
+
+- bounded `[all]>=0.1.0,<0.2.0` public registry dependency and exact `uv.lock`;
+- direct Taskweavn `openai`/`anthropic` dependencies removed;
+- exact external contract/error/retry/provider symbol identity through compatibility exports;
+- provider transport/conversion/parser implementation removed from Taskweavn;
+- safe package telemetry projected through `TaskweavnTelemetryObserver`;
+- recursively immutable package response messages converted through `to_dict()`
+  before Taskweavn transcript, checkpoint, and log serialization;
+- new `tests/test_llm_package_boundary.py` enforces the dependency, identity,
+  source-removal, telemetry, and chat-only protocol boundaries.
+
+Completed Taskweavn verification evidence:
+
+- complete backend suite: `1604 passed, 1 skipped`;
+- changed Python scope Ruff: passed;
+- changed production/boundary-test strict Mypy: passed;
+- `uv lock --check` and `git diff --check`: passed;
+- exact duplicate provider source scan: no matches;
+- the nine-file pre-migration 76-test baseline remains covered by the complete
+  suite, with six additive package boundary tests.
+
+Evidence still required before feature closure:
+
+- Taskweavn PR exact-head independent review and any remediation;
+- Taskweavn merge proof and lifecycle post-merge traceability.
